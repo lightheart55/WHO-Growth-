@@ -5,41 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>WHO Growth Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Babel for JSX transformation in browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         /* Custom scrollbar for clean UI */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1; 
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1; 
-            border-radius: 3px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8; 
-        }
-        /* Touch action manipulation for better mobile feel */
-        body {
-            touch-action: manipulation;
-        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     </style>
-    <!-- Polyfill process for browser environment to avoid ReferenceError -->
-    <script>
-        window.process = window.process || { env: { API_KEY: '' } };
-    </script>
-<script type="importmap">
+    <script type="importmap">
 {
   "imports": {
     "react": "https://esm.sh/react@18.2.0",
     "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-    "@google/genai": "https://esm.sh/@google/genai",
-    "recharts": "https://esm.sh/recharts@2.12.3?external=react,react-dom",
-    "lucide-react": "https://esm.sh/lucide-react@0.344.0?external=react",
+    "@google/genai": "https://esm.sh/@google/genai@0.1.1",
+    "recharts": "https://esm.sh/recharts@2.12.2",
+    "lucide-react": "https://esm.sh/lucide-react@0.344.0",
     "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
     "react/": "https://esm.sh/react@^19.2.3/"
   }
@@ -49,111 +31,83 @@
 <body class="bg-slate-50 text-slate-900 antialiased selection:bg-teal-100 selection:text-teal-900">
     <div id="root"></div>
 
-    <script type="text/babel" data-type="module" data-presets="typescript,react">
+    <script type="text/babel" data-type="module">
         import React, { useState, useMemo } from 'react';
         import ReactDOM from 'react-dom/client';
-        import { GoogleGenAI } from "@google/genai";
-        import { 
-            ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, ReferenceDot 
+        import { GoogleGenAI } from '@google/genai';
+        import {
+          ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot
         } from 'recharts';
-        import { 
-            Trash2, Activity, Share2, AlertCircle, Baby, Stethoscope, Save, Home, BarChart2, History, ChevronDown, RotateCcw, Info, CheckCircle, AlertTriangle, XCircle 
+        import {
+          Trash2, Activity, Share2, AlertCircle, Baby, Stethoscope, Save, Home, BarChart2, History, ChevronDown, RotateCcw, Info, CheckCircle, AlertTriangle
         } from 'lucide-react';
 
-        // --- TYPES ---
-        type Gender = 'boy' | 'girl';
-
-        interface GrowthRecord {
-            id: string;
-            date: string;
-            ageMonths: number;
-            weight: number;
-            height: number;
-        }
-
-        interface WhoStandardPoint {
-            month: number;
-            sd3neg: number;
-            sd2neg: number;
-            sd0: number;
-            sd2: number;
-            sd3: number;
-        }
-
-        interface WhoStandards {
-            wfa: { boy: WhoStandardPoint[]; girl: WhoStandardPoint[]; };
-            lhfa: { boy: WhoStandardPoint[]; girl: WhoStandardPoint[]; };
-        }
-
-        interface AnalysisResult {
-            status: 'normal' | 'risk_stunted' | 'stunted' | 'risk_underweight' | 'underweight' | 'overweight' | 'obese';
-            zScore: number;
-            message: string;
-            color: string;
-        }
-
-        type ChartType = 'weight' | 'height';
-
-        // --- DATA (WHO STANDARDS) ---
-        
-        const boysWeight = [
-            { month: 0, sd3neg: 2.1, sd2neg: 2.5, sd0: 3.3, sd2: 4.4, sd3: 5.0 },
-            { month: 3, sd3neg: 4.4, sd2neg: 5.0, sd0: 6.4, sd2: 8.0, sd3: 9.0 },
-            { month: 6, sd3neg: 5.7, sd2neg: 6.4, sd0: 7.9, sd2: 9.8, sd3: 10.9 },
-            { month: 9, sd3neg: 6.5, sd2neg: 7.1, sd0: 8.9, sd2: 10.9, sd3: 12.1 },
-            { month: 12, sd3neg: 7.0, sd2neg: 7.7, sd0: 9.6, sd2: 11.8, sd3: 13.1 },
-            { month: 18, sd3neg: 7.8, sd2neg: 8.8, sd0: 10.9, sd2: 13.5, sd3: 14.8 },
-            { month: 24, sd3neg: 8.6, sd2neg: 9.7, sd0: 12.2, sd2: 15.3, sd3: 17.0 },
-            { month: 36, sd3neg: 10.0, sd2neg: 11.3, sd0: 14.3, sd2: 18.3, sd3: 20.7 },
-            { month: 48, sd3neg: 11.2, sd2neg: 12.7, sd0: 16.3, sd2: 21.2, sd3: 24.5 },
-            { month: 60, sd3neg: 12.4, sd2neg: 14.1, sd0: 18.3, sd2: 24.2, sd3: 28.5 },
-        ];
-
-        const girlsWeight = [
-            { month: 0, sd3neg: 2.0, sd2neg: 2.4, sd0: 3.2, sd2: 4.2, sd3: 4.8 },
-            { month: 3, sd3neg: 4.0, sd2neg: 4.5, sd0: 5.8, sd2: 7.3, sd3: 8.2 },
-            { month: 6, sd3neg: 5.1, sd2neg: 5.7, sd0: 7.3, sd2: 9.1, sd3: 10.2 },
-            { month: 9, sd3neg: 5.8, sd2neg: 6.5, sd0: 8.2, sd2: 10.2, sd3: 11.5 },
-            { month: 12, sd3neg: 6.3, sd2neg: 7.0, sd0: 8.9, sd2: 11.2, sd3: 12.6 },
-            { month: 18, sd3neg: 7.2, sd2neg: 8.1, sd0: 10.2, sd2: 12.8, sd3: 14.5 },
-            { month: 24, sd3neg: 8.1, sd2neg: 9.0, sd0: 11.5, sd2: 14.6, sd3: 16.6 },
-            { month: 36, sd3neg: 9.6, sd2neg: 10.8, sd0: 13.9, sd2: 18.1, sd3: 20.9 },
-            { month: 48, sd3neg: 10.9, sd2neg: 12.3, sd0: 16.1, sd2: 21.5, sd3: 25.4 },
-            { month: 60, sd3neg: 12.1, sd2neg: 13.7, sd0: 18.2, sd2: 24.9, sd3: 30.0 },
-        ];
-
-        const boysHeight = [
-            { month: 0, sd3neg: 44.2, sd2neg: 46.1, sd0: 49.9, sd2: 53.7, sd3: 55.6 },
-            { month: 3, sd3neg: 55.6, sd2neg: 57.6, sd0: 61.4, sd2: 65.2, sd3: 67.2 },
-            { month: 6, sd3neg: 61.2, sd2neg: 63.3, sd0: 67.6, sd2: 71.9, sd3: 74.0 },
-            { month: 9, sd3neg: 65.0, sd2neg: 67.2, sd0: 72.0, sd2: 76.8, sd3: 79.3 },
-            { month: 12, sd3neg: 68.6, sd2neg: 71.0, sd0: 75.7, sd2: 80.5, sd3: 82.9 },
-            { month: 18, sd3neg: 74.8, sd2neg: 76.9, sd0: 82.3, sd2: 87.7, sd3: 90.4 },
-            { month: 24, sd3neg: 80.0, sd2neg: 81.7, sd0: 87.8, sd2: 93.9, sd3: 97.0 },
-            { month: 36, sd3neg: 87.4, sd2neg: 89.4, sd0: 96.1, sd2: 102.8, sd3: 106.1 },
-            { month: 48, sd3neg: 93.0, sd2neg: 95.4, sd0: 103.3, sd2: 111.2, sd3: 115.2 },
-            { month: 60, sd3neg: 98.4, sd2neg: 101.0, sd0: 110.0, sd2: 119.0, sd3: 123.5 },
-        ];
-
-        const girlsHeight = [
-            { month: 0, sd3neg: 43.6, sd2neg: 45.4, sd0: 49.1, sd2: 52.9, sd3: 54.7 },
-            { month: 3, sd3neg: 54.0, sd2neg: 55.6, sd0: 59.8, sd2: 64.0, sd3: 66.1 },
-            { month: 6, sd3neg: 59.3, sd2neg: 61.2, sd0: 65.7, sd2: 70.3, sd3: 72.5 },
-            { month: 9, sd3neg: 62.9, sd2neg: 65.0, sd0: 70.1, sd2: 75.2, sd3: 77.8 },
-            { month: 12, sd3neg: 66.3, sd2neg: 68.9, sd0: 74.0, sd2: 79.2, sd3: 81.7 },
-            { month: 18, sd3neg: 72.8, sd2neg: 74.9, sd0: 80.7, sd2: 86.5, sd3: 89.4 },
-            { month: 24, sd3neg: 78.0, sd2neg: 80.0, sd0: 86.4, sd2: 92.8, sd3: 96.0 },
-            { month: 36, sd3neg: 86.1, sd2neg: 88.5, sd0: 95.1, sd2: 101.7, sd3: 105.0 },
-            { month: 48, sd3neg: 91.8, sd2neg: 94.7, sd0: 102.7, sd2: 110.7, sd3: 114.6 },
-            { month: 60, sd3neg: 97.1, sd2neg: 99.9, sd0: 109.4, sd2: 118.9, sd3: 123.7 },
-        ];
-
-        const WHO_STANDARDS: WhoStandards = {
-            wfa: { boy: boysWeight, girl: girlsWeight },
-            lhfa: { boy: boysHeight, girl: girlsHeight }
+        // --- ENVIRONMENT CONFIG ---
+        // Để sử dụng tính năng AI, hãy điền API Key của bạn vào đây
+        window.process = {
+            env: {
+                API_KEY: '' 
+            }
         };
 
-        const interpolateData = (data: any[], maxMonth: number = 60) => {
+        // --- DATA STANDARDS (WHO) ---
+        // Subset of WHO data for demonstration
+        const boysWeight = [
+          { month: 0, sd3neg: 2.1, sd2neg: 2.5, sd0: 3.3, sd2: 4.4, sd3: 5.0 },
+          { month: 3, sd3neg: 4.4, sd2neg: 5.0, sd0: 6.4, sd2: 8.0, sd3: 9.0 },
+          { month: 6, sd3neg: 5.7, sd2neg: 6.4, sd0: 7.9, sd2: 9.8, sd3: 10.9 },
+          { month: 9, sd3neg: 6.5, sd2neg: 7.1, sd0: 8.9, sd2: 10.9, sd3: 12.1 },
+          { month: 12, sd3neg: 7.0, sd2neg: 7.7, sd0: 9.6, sd2: 11.8, sd3: 13.1 },
+          { month: 18, sd3neg: 7.8, sd2neg: 8.8, sd0: 10.9, sd2: 13.5, sd3: 14.8 },
+          { month: 24, sd3neg: 8.6, sd2neg: 9.7, sd0: 12.2, sd2: 15.3, sd3: 17.0 },
+          { month: 36, sd3neg: 10.0, sd2neg: 11.3, sd0: 14.3, sd2: 18.3, sd3: 20.7 },
+          { month: 48, sd3neg: 11.2, sd2neg: 12.7, sd0: 16.3, sd2: 21.2, sd3: 24.5 },
+          { month: 60, sd3neg: 12.4, sd2neg: 14.1, sd0: 18.3, sd2: 24.2, sd3: 28.5 },
+        ];
+        const girlsWeight = [
+          { month: 0, sd3neg: 2.0, sd2neg: 2.4, sd0: 3.2, sd2: 4.2, sd3: 4.8 },
+          { month: 3, sd3neg: 4.0, sd2neg: 4.5, sd0: 5.8, sd2: 7.3, sd3: 8.2 },
+          { month: 6, sd3neg: 5.1, sd2neg: 5.7, sd0: 7.3, sd2: 9.1, sd3: 10.2 },
+          { month: 9, sd3neg: 5.8, sd2neg: 6.5, sd0: 8.2, sd2: 10.2, sd3: 11.5 },
+          { month: 12, sd3neg: 6.3, sd2neg: 7.0, sd0: 8.9, sd2: 11.2, sd3: 12.6 },
+          { month: 18, sd3neg: 7.2, sd2neg: 8.1, sd0: 10.2, sd2: 12.8, sd3: 14.5 },
+          { month: 24, sd3neg: 8.1, sd2neg: 9.0, sd0: 11.5, sd2: 14.6, sd3: 16.6 },
+          { month: 36, sd3neg: 9.6, sd2neg: 10.8, sd0: 13.9, sd2: 18.1, sd3: 20.9 },
+          { month: 48, sd3neg: 10.9, sd2neg: 12.3, sd0: 16.1, sd2: 21.5, sd3: 25.4 },
+          { month: 60, sd3neg: 12.1, sd2neg: 13.7, sd0: 18.2, sd2: 24.9, sd3: 30.0 },
+        ];
+        const boysHeight = [
+          { month: 0, sd3neg: 44.2, sd2neg: 46.1, sd0: 49.9, sd2: 53.7, sd3: 55.6 },
+          { month: 3, sd3neg: 55.6, sd2neg: 57.6, sd0: 61.4, sd2: 65.2, sd3: 67.2 },
+          { month: 6, sd3neg: 61.2, sd2neg: 63.3, sd0: 67.6, sd2: 71.9, sd3: 74.0 },
+          { month: 9, sd3neg: 65.0, sd2neg: 67.2, sd0: 72.0, sd2: 76.8, sd3: 79.3 },
+          { month: 12, sd3neg: 68.6, sd2neg: 71.0, sd0: 75.7, sd2: 80.5, sd3: 82.9 },
+          { month: 18, sd3neg: 74.8, sd2neg: 76.9, sd0: 82.3, sd2: 87.7, sd3: 90.4 },
+          { month: 24, sd3neg: 80.0, sd2neg: 81.7, sd0: 87.8, sd2: 93.9, sd3: 97.0 },
+          { month: 36, sd3neg: 87.4, sd2neg: 89.4, sd0: 96.1, sd2: 102.8, sd3: 106.1 },
+          { month: 48, sd3neg: 93.0, sd2neg: 95.4, sd0: 103.3, sd2: 111.2, sd3: 115.2 },
+          { month: 60, sd3neg: 98.4, sd2neg: 101.0, sd0: 110.0, sd2: 119.0, sd3: 123.5 },
+        ];
+        const girlsHeight = [
+          { month: 0, sd3neg: 43.6, sd2neg: 45.4, sd0: 49.1, sd2: 52.9, sd3: 54.7 },
+          { month: 3, sd3neg: 54.0, sd2neg: 55.6, sd0: 59.8, sd2: 64.0, sd3: 66.1 },
+          { month: 6, sd3neg: 59.3, sd2neg: 61.2, sd0: 65.7, sd2: 70.3, sd3: 72.5 },
+          { month: 9, sd3neg: 62.9, sd2neg: 65.0, sd0: 70.1, sd2: 75.2, sd3: 77.8 },
+          { month: 12, sd3neg: 66.3, sd2neg: 68.9, sd0: 74.0, sd2: 79.2, sd3: 81.7 },
+          { month: 18, sd3neg: 72.8, sd2neg: 74.9, sd0: 80.7, sd2: 86.5, sd3: 89.4 },
+          { month: 24, sd3neg: 78.0, sd2neg: 80.0, sd0: 86.4, sd2: 92.8, sd3: 96.0 },
+          { month: 36, sd3neg: 86.1, sd2neg: 88.5, sd0: 95.1, sd2: 101.7, sd3: 105.0 },
+          { month: 48, sd3neg: 91.8, sd2neg: 94.7, sd0: 102.7, sd2: 110.7, sd3: 114.6 },
+          { month: 60, sd3neg: 97.1, sd2neg: 99.9, sd0: 109.4, sd2: 118.9, sd3: 123.7 },
+        ];
+
+        const WHO_STANDARDS = {
+          wfa: { boy: boysWeight, girl: girlsWeight },
+          lhfa: { boy: boysHeight, girl: girlsHeight }
+        };
+
+        // --- UTILS ---
+        const interpolateData = (data, maxMonth = 60) => {
             const result = [];
             for (let m = 0; m <= maxMonth; m++) {
                 const lower = data.filter(p => p.month <= m).pop() || data[0];
@@ -175,313 +129,275 @@
             return result;
         };
 
-        // --- UTILS ---
-
-        const calculateAgeMonths = (dob: string, measureDate: string): number => {
-            const birth = new Date(dob);
-            const check = new Date(measureDate);
-            const diffTime = Math.abs(check.getTime() - birth.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            return parseFloat((diffDays / 30.4375).toFixed(1));
+        const calculateAgeMonths = (dob, measureDate) => {
+          const birth = new Date(dob);
+          const check = new Date(measureDate);
+          const diffTime = Math.abs(check.getTime() - birth.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          return parseFloat((diffDays / 30.4375).toFixed(1));
         };
 
-        const analyzeGrowth = (age: number, value: number, gender: Gender, type: ChartType): AnalysisResult => {
-            const standards = type === 'weight' ? WHO_STANDARDS.wfa : WHO_STANDARDS.lhfa;
-            const rawData = gender === 'boy' ? standards.boy : standards.girl;
-            const data = interpolateData(rawData, Math.ceil(age) + 1);
-            const point = data.find(p => p.month >= age) || data[data.length - 1];
-            
-            let status: AnalysisResult['status'] = 'normal';
-            let message = 'Phát triển bình thường';
-            let color = 'text-green-600';
+        const analyzeGrowth = (age, value, gender, type) => {
+          const standards = type === 'weight' ? WHO_STANDARDS.wfa : WHO_STANDARDS.lhfa;
+          const rawData = gender === 'boy' ? standards.boy : standards.girl;
+          const data = interpolateData(rawData, Math.ceil(age) + 1);
+          const point = data.find(p => p.month >= age) || data[data.length - 1];
+          
+          let status = 'normal';
+          let message = 'Phát triển bình thường';
+          let color = 'text-green-600';
 
-            if (value < point.sd3neg) {
-                status = type === 'weight' ? 'underweight' : 'stunted';
-                message = type === 'weight' ? 'Suy dinh dưỡng thể nhẹ cân nặng (<-3SD)' : 'Suy dinh dưỡng thể thấp còi nặng (<-3SD)';
-                color = 'text-red-600';
-            } else if (value < point.sd2neg) {
-                status = type === 'weight' ? 'risk_underweight' : 'risk_stunted';
-                message = type === 'weight' ? 'Suy dinh dưỡng thể nhẹ cân vừa (<-2SD)' : 'Thấp còi độ 1 (<-2SD)';
-                color = 'text-orange-500';
-            } else if (value > point.sd3) {
-                status = 'obese'; 
-                message = 'Cao hơn nhiều so với tuổi (>+3SD)';
-                color = 'text-red-600';
-            } else if (value > point.sd2) {
-                status = 'overweight';
-                message = 'Cao hơn so với tuổi (>+2SD)';
-                color = 'text-orange-500';
-            }
+          if (value < point.sd3neg) {
+            status = type === 'weight' ? 'underweight' : 'stunted'; 
+            message = type === 'weight' ? 'Suy dinh dưỡng thể nhẹ cân nặng (<-3SD)' : 'Suy dinh dưỡng thể thấp còi nặng (<-3SD)';
+            color = 'text-red-600';
+          } else if (value < point.sd2neg) {
+            status = type === 'weight' ? 'risk_underweight' : 'risk_stunted';
+            message = type === 'weight' ? 'Suy dinh dưỡng thể nhẹ cân vừa (<-2SD)' : 'Thấp còi độ 1 (<-2SD)';
+            color = 'text-orange-500';
+          } else if (value > point.sd3) {
+            status = 'obese'; 
+            message = 'Cao hơn nhiều so với tuổi (>+3SD)';
+            color = 'text-red-600';
+          } else if (value > point.sd2) {
+            status = 'overweight';
+            message = 'Cao hơn so với tuổi (>+2SD)';
+            color = 'text-orange-500';
+          }
 
-            let zScore = 0;
-            if (value > point.sd0) {
-                const diff = point.sd2 - point.sd0;
-                zScore = ((value - point.sd0) / (diff / 2));
-            } else {
-                const diff = point.sd0 - point.sd2neg;
-                zScore = ((value - point.sd0) / (diff / 2));
-            }
-            return { status, message, color, zScore };
+          let zScore = 0;
+          if (value > point.sd0) {
+            const diff = point.sd2 - point.sd0;
+            zScore = ((value - point.sd0) / (diff / 2));
+          } else {
+            const diff = point.sd0 - point.sd2neg;
+            zScore = ((value - point.sd0) / (diff / 2));
+          }
+          return { status, message, color, zScore };
         };
 
-        // --- SERVICE (GEMINI) ---
+        // --- SERVICES ---
+        const getGeminiAdvice = async (age, gender, weight, height, wAnalysis, hAnalysis) => {
+          if (!window.process.env.API_KEY) {
+            return "Vui lòng nhập API Key trong mã nguồn (dòng window.process = ...) để sử dụng tính năng này.";
+          }
+          try {
+            const ai = new GoogleGenAI({ apiKey: window.process.env.API_KEY });
+            const prompt = `
+              Bạn là bác sĩ dinh dưỡng nhi khoa uy tín.
+              Hãy đưa ra lời khuyên ngắn gọn cho bố mẹ của bé dựa trên số liệu sau:
+              - Tuổi: ${age} tháng
+              - Giới tính: ${gender === 'boy' ? 'Bé trai' : 'Bé gái'}
+              - Cân nặng: ${weight} kg (Đánh giá: ${wAnalysis.message}, Z-Score: ${wAnalysis.zScore.toFixed(2)})
+              - Chiều cao: ${height} cm (Đánh giá: ${hAnalysis.message}, Z-Score: ${hAnalysis.zScore.toFixed(2)})
 
-        const getGeminiAdvice = async (age: number, gender: Gender, weight: number, height: number, wAnalysis: AnalysisResult, hAnalysis: AnalysisResult): Promise<string> => {
-            if (!process.env.API_KEY) {
-                console.warn("API Key is missing for Gemini");
-                return "Không thể kết nối AI: Thiếu API Key.";
-            }
-            try {
-                const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-                const prompt = `
-                Bạn là bác sĩ dinh dưỡng nhi khoa uy tín.
-                Hãy đưa ra lời khuyên ngắn gọn cho bố mẹ của bé dựa trên số liệu sau:
-                - Tuổi: ${age} tháng
-                - Giới tính: ${gender === 'boy' ? 'Bé trai' : 'Bé gái'}
-                - Cân nặng: ${weight} kg (Đánh giá: ${wAnalysis.message}, Z-Score: ${wAnalysis.zScore.toFixed(2)})
-                - Chiều cao: ${height} cm (Đánh giá: ${hAnalysis.message}, Z-Score: ${hAnalysis.zScore.toFixed(2)})
-
-                Yêu cầu:
-                1. Nhận xét tổng quan giọng điệu cảm thông, chuyên nghiệp.
-                2. Nếu bé suy dinh dưỡng hoặc thấp còi, gợi ý 3 món ăn cụ thể, dễ nấu, nguyên liệu phổ biến ở Việt Nam.
-                3. Nếu bé thừa cân, gợi ý cách điều chỉnh vận động.
-                4. Ngắn gọn trong 3 đoạn văn nhỏ.
-                `;
-                const response = await ai.models.generateContent({
-                    model: 'gemini-3-flash-preview',
-                    contents: prompt,
-                });
-                return response.text || "Không thể tạo lời khuyên.";
-            } catch (error) {
-                console.error("Gemini API Error:", error);
-                return "Hệ thống AI đang bận, vui lòng thử lại sau.";
-            }
+              Yêu cầu:
+              1. Nhận xét tổng quan giọng điệu cảm thông, chuyên nghiệp.
+              2. Nếu bé suy dinh dưỡng hoặc thấp còi, gợi ý 3 món ăn cụ thể, dễ nấu, nguyên liệu phổ biến ở Việt Nam.
+              3. Nếu bé thừa cân, gợi ý cách điều chỉnh vận động.
+              4. Ngắn gọn trong 3 đoạn văn nhỏ.
+            `;
+            const response = await ai.models.generateContent({
+              model: 'gemini-2.0-flash',
+              contents: prompt,
+            });
+            return response.text || "Không thể tạo lời khuyên.";
+          } catch (error) {
+            console.error("Gemini API Error:", error);
+            return "Hệ thống AI đang bận, vui lòng thử lại sau.";
+          }
         };
 
         // --- COMPONENTS ---
 
-        const ZScoreGauge = ({ zScore, label }: { zScore: number, label: string }) => {
-            const clampedZ = Math.max(-4, Math.min(4, zScore));
-            const percent = ((clampedZ + 4) / 8) * 100;
-            let markerColor = 'bg-green-500';
-            if (clampedZ < -2 || clampedZ > 2) markerColor = 'bg-orange-500';
-            if (clampedZ < -3 || clampedZ > 3) markerColor = 'bg-red-500';
+        const ZScoreGauge = ({ zScore, label }) => {
+          const clampedZ = Math.max(-4, Math.min(4, zScore));
+          const percent = ((clampedZ + 4) / 8) * 100;
+          let markerColor = 'bg-green-500';
+          if (clampedZ < -2 || clampedZ > 2) markerColor = 'bg-orange-500';
+          if (clampedZ < -3 || clampedZ > 3) markerColor = 'bg-red-500';
 
-            return (
-                <div className="w-full mt-3 select-none">
-                <div className="flex justify-between text-[10px] text-slate-400 mb-1.5 font-semibold px-[12.5%]">
-                    <span className="-ml-2">-2SD</span>
-                    <span className="text-slate-300">0</span>
-                    <span className="-mr-2">+2SD</span>
+          return (
+            <div className="w-full mt-3 select-none">
+              <div className="flex justify-between text-[10px] text-slate-400 mb-1.5 font-semibold px-[12.5%]">
+                <span className="-ml-2">-2SD</span>
+                <span className="text-slate-300">0</span>
+                <span className="-mr-2">+2SD</span>
+              </div>
+              <div className="relative h-3.5 w-full rounded-full overflow-hidden flex shadow-inner ring-1 ring-slate-100">
+                <div className="w-[12.5%] bg-red-400 h-full border-r border-white/20"></div>
+                <div className="w-[12.5%] bg-orange-300 h-full border-r border-white/20"></div>
+                <div className="w-[50%] bg-emerald-400 h-full relative border-r border-white/20">
+                    <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/40"></div>
                 </div>
-                <div className="relative h-3.5 w-full rounded-full overflow-hidden flex shadow-inner ring-1 ring-slate-100">
-                    <div className="w-[12.5%] bg-red-400 h-full border-r border-white/20" title="Suy dinh dưỡng nặng"></div>
-                    <div className="w-[12.5%] bg-orange-300 h-full border-r border-white/20" title="Nguy cơ"></div>
-                    <div className="w-[50%] bg-emerald-400 h-full relative border-r border-white/20" title="Bình thường">
-                        <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-white/40"></div>
-                    </div>
-                    <div className="w-[12.5%] bg-orange-300 h-full border-r border-white/20" title="Cao/Thừa cân"></div>
-                    <div className="w-[12.5%] bg-red-400 h-full" title="Rất cao/Béo phì"></div>
-                    <div className="absolute top-0 bottom-0 w-0.5 bg-slate-800 z-10 transition-all duration-1000 ease-out" style={{ left: `${percent}%` }}></div>
-                    <div className={`absolute top-1/2 w-4 h-4 border-[3px] border-white rounded-full shadow-md z-20 transition-all duration-1000 ease-out ${markerColor}`} style={{ left: `${percent}%`, transform: 'translate(-50%, -50%)' }}></div>
-                </div>
-                <div className="flex items-center justify-between mt-2.5">
-                    <p className="text-xs font-medium text-slate-500 truncate max-w-[70%]">{label}</p>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${clampedZ < -2 || clampedZ > 2 ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}`}>
-                        Z: {zScore > 0 ? '+' : ''}{zScore.toFixed(2)}
-                    </span>
-                </div>
-                </div>
-            );
+                <div className="w-[12.5%] bg-orange-300 h-full border-r border-white/20"></div>
+                <div className="w-[12.5%] bg-red-400 h-full"></div>
+                <div className="absolute top-0 bottom-0 w-0.5 bg-slate-800 z-10 transition-all duration-1000 ease-out" style={{ left: `${percent}%` }}></div>
+                <div className={`absolute top-1/2 w-4 h-4 border-[3px] border-white rounded-full shadow-md z-20 transition-all duration-1000 ease-out ${markerColor}`} style={{ left: `${percent}%`, transform: 'translate(-50%, -50%)' }}></div>
+              </div>
+              <div className="flex items-center justify-between mt-2.5">
+                 <p className="text-xs font-medium text-slate-500 truncate max-w-[70%]">{label}</p>
+                 <span className={`text-xs font-bold px-2 py-0.5 rounded ${clampedZ < -2 || clampedZ > 2 ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                    Z: {zScore > 0 ? '+' : ''}{zScore.toFixed(2)}
+                 </span>
+              </div>
+            </div>
+          );
         };
 
-        const CustomTooltip = ({ active, payload, label }: any) => {
-            if (active && payload && payload.length) {
-                const childPoint = payload.find((p: any) => p.name === 'Trẻ' || p.name === 'Đang nhập');
-                return (
-                <div className="bg-white/95 p-3 border border-slate-200 shadow-xl rounded-lg text-sm backdrop-blur-sm z-50">
-                    <p className="font-bold text-slate-700 mb-1">Tháng tuổi: {label}</p>
-                    {childPoint && (
-                    <div className="text-teal-700 font-bold text-base flex items-center gap-2">
-                        <span>{childPoint.name === 'Đang nhập' ? 'Dự tính:' : 'Thực tế:'}</span>
-                        <span className="text-xl">{childPoint.value}</span>
-                        <span className="text-xs font-normal text-slate-500">(Chuẩn: {payload.find((p:any) => p.dataKey === 'sd0')?.value})</span>
-                    </div>
-                    )}
+        const CustomTooltip = ({ active, payload, label }) => {
+          if (active && payload && payload.length) {
+            const childPoint = payload.find(p => p.name === 'Trẻ' || p.name === 'Đang nhập');
+            return (
+              <div className="bg-white/95 p-4 border border-slate-200 shadow-xl rounded-2xl text-sm backdrop-blur-md z-50 ring-1 ring-black/5">
+                <p className="font-bold text-slate-700 mb-2 border-b border-slate-100 pb-1">{label} tháng tuổi</p>
+                {childPoint ? (
+                   <div className="mb-2">
+                     <div className="text-slate-500 text-xs uppercase font-semibold mb-0.5">{childPoint.name === 'Đang nhập' ? 'Dự tính' : 'Của bé'}</div>
+                     <div className="text-teal-600 font-black text-2xl flex items-baseline gap-1">
+                        {childPoint.value}<span className="text-sm font-bold text-slate-400">{childPoint.payload.unit || ''}</span>
+                     </div>
+                   </div>
+                ) : <p className="text-xs text-slate-400 italic mb-2">Chưa có dữ liệu bé tại mốc này</p>}
+                <div className="bg-slate-50 p-2 rounded-lg space-y-1">
+                   <div className="flex justify-between text-xs text-slate-500"><span>Trung bình (WHO):</span><span className="font-bold text-slate-700">{payload.find(p => p.dataKey === 'sd0')?.value}</span></div>
+                   <div className="flex justify-between text-xs text-slate-500"><span>Giới hạn dưới (-2SD):</span><span className="font-bold text-orange-600">{payload.find(p => p.dataKey === 'sd2neg')?.value}</span></div>
                 </div>
-                );
-            }
-            return null;
+              </div>
+            );
+          }
+          return null;
         };
 
-        const GrowthChart = ({ records, gender, type, previewData }: any) => {
-            const chartData = useMemo(() => {
-                const standardsRaw = type === 'weight' ? WHO_STANDARDS.wfa[gender] : WHO_STANDARDS.lhfa[gender];
-                const recordAges = records.map((r: any) => r.ageMonths);
-                if (previewData) recordAges.push(previewData.ageMonths);
-                const maxRecordAge = recordAges.length > 0 ? Math.max(...recordAges) : 0;
-                const viewMaxAge = Math.min(60, Math.max(24, Math.ceil(maxRecordAge + 5)));
-                return interpolateData(standardsRaw, viewMaxAge);
-            }, [gender, type, records, previewData]);
+        const GrowthChart = ({ records, gender, type, previewData }) => {
+          const chartData = useMemo(() => {
+            const standardsRaw = type === 'weight' ? WHO_STANDARDS.wfa[gender] : WHO_STANDARDS.lhfa[gender];
+            const recordAges = records.map(r => r.ageMonths);
+            if (previewData) recordAges.push(previewData.ageMonths);
+            const maxRecordAge = recordAges.length > 0 ? Math.max(...recordAges) : 0;
+            const viewMaxAge = Math.min(60, Math.max(24, Math.ceil(maxRecordAge + 6)));
+            return interpolateData(standardsRaw, viewMaxAge);
+          }, [gender, type, records, previewData]);
 
-            const childData = useMemo(() => {
-                const data = records.map((r: any) => ({
-                    age: r.ageMonths,
-                    value: type === 'weight' ? r.weight : r.height,
-                    isPreview: false
-                }));
-                if (previewData) {
-                    data.push({
-                        age: previewData.ageMonths,
-                        value: type === 'weight' ? previewData.weight : previewData.height,
-                        isPreview: true
-                    });
-                }
-                return data.sort((a: any, b: any) => a.age - b.age);
-            }, [records, previewData, type]);
+          const childData = useMemo(() => {
+              const data = records.map(r => ({
+                month: r.ageMonths, 
+                value: type === 'weight' ? r.weight : r.height,
+                unit: type === 'weight' ? 'kg' : 'cm',
+                isPreview: false
+              }));
+              if (previewData) {
+                  data.push({
+                      month: previewData.ageMonths,
+                      value: type === 'weight' ? previewData.weight : previewData.height,
+                      unit: type === 'weight' ? 'kg' : 'cm',
+                      isPreview: true
+                  });
+              }
+              return data.sort((a,b) => a.month - b.month);
+          }, [records, previewData, type]);
 
-            const yLabel = type === 'weight' ? 'kg' : 'cm';
-            const mainColor = gender === 'boy' ? '#2563eb' : '#db2777'; 
-            const title = type === 'weight' ? 'Cân nặng theo Tuổi' : 'Chiều cao theo Tuổi';
-            const colorHigh = "#fef08a"; 
-            const colorNormal = "#bbf7d0"; 
-            const colorRisk = "#fdba74"; 
-            const colorSevere = "#fca5a5"; 
+          const yLabel = type === 'weight' ? 'kg' : 'cm';
+          const mainColor = gender === 'boy' ? '#2563eb' : '#db2777'; 
+          const title = type === 'weight' ? 'Cân nặng theo Tuổi' : 'Chiều cao theo Tuổi';
+          const colorHigh = "#fef9c3"; const colorNormal = "#dcfce7"; const colorRisk = "#ffedd5"; const colorSevere = "#fee2e2";
 
-            return (
-                <div className="w-full h-[350px] md:h-[450px] bg-white rounded-2xl shadow-lg border border-slate-100 p-2 md:p-5 flex flex-col relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-1.5 h-full bg-slate-100"></div>
-                <h3 className="text-center font-bold text-slate-700 mb-4 uppercase text-sm md:text-base tracking-wide flex items-center justify-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${gender === 'boy' ? 'bg-blue-500' : 'bg-pink-500'}`}></span>
-                    {title} 
-                </h3>
-                <div className="flex-1 w-full min-h-0">
-                    <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart margin={{ top: 10, right: 10, left: -10, bottom: 5 }}>
-                        <defs><filter id="shadow" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" floodColor="rgba(0,0,0,0.2)"/></filter></defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="month" type="number" domain={[0, 'auto']} allowDataOverflow={false} tick={{fontSize: 10, fill: '#64748b', fontWeight: 600}} tickCount={8} unit="th" />
-                        <YAxis domain={['auto', 'auto']} tick={{fontSize: 10, fill: '#64748b', fontWeight: 600}} width={40} unit={yLabel} />
-                        <RechartsTooltip content={<CustomTooltip />} />
-                        <Legend wrapperStyle={{fontSize: '11px', paddingTop: '10px'}} iconType="circle" iconSize={8}/>
-                        <Area data={chartData} type="monotone" dataKey="sd3" stroke="none" fill={colorHigh} fillOpacity={0.6} name="Cao" legendType="square"/>
-                        <Area data={chartData} type="monotone" dataKey="sd2" stroke="none" fill={colorNormal} fillOpacity={0.9} name="Chuẩn" legendType="square"/>
-                        <Area data={chartData} type="monotone" dataKey="sd2neg" stroke="none" fill={colorRisk} fillOpacity={0.9} name="Nguy cơ" legendType="square"/>
-                        <Area data={chartData} type="monotone" dataKey="sd3neg" stroke="none" fill={colorSevere} fillOpacity={0.9} name="Suy dinh dưỡng" legendType="square"/>
-                        <Line data={chartData} type="basis" dataKey="sd0" stroke="#059669" dot={false} strokeWidth={1} strokeDasharray="4 4" name="Trung bình" />
-                        <Line data={childData.filter((d: any) => !d.isPreview)} dataKey="value" type="monotone" stroke={mainColor} strokeWidth={3} dot={{ r: 4, fill: mainColor, strokeWidth: 2, stroke: '#fff' }} name="Trẻ" connectNulls isAnimationActive={false} filter="url(#shadow)"/>
-                        {previewData && (
-                            <ReferenceDot x={previewData.ageMonths} y={type === 'weight' ? previewData.weight : previewData.height} r={6} fill="#fff" stroke={mainColor} strokeWidth={3} isFront={true}>
-                                <animate attributeName="r" from="6" to="10" dur="1s" begin="0s" repeatCount="indefinite" values="6; 10; 6" keyTimes="0; 0.5; 1" />
-                                <animate attributeName="stroke-opacity" from="1" to="0.5" dur="1s" repeatCount="indefinite" values="1; 0.5; 1" keyTimes="0; 0.5; 1" />
-                            </ReferenceDot>
-                        )}
-                    </ComposedChart>
-                    </ResponsiveContainer>
-                </div>
-                </div>
-            );
+          return (
+            <div className="w-full h-[350px] md:h-[450px] bg-white rounded-2xl p-2 md:p-5 flex flex-col relative overflow-hidden">
+              <h3 className="text-center font-bold text-slate-700 mb-4 uppercase text-sm md:text-base tracking-wide flex items-center justify-center gap-2">
+                <span className={`w-3 h-3 rounded-full ${gender === 'boy' ? 'bg-blue-500' : 'bg-pink-500'}`}></span>{title} 
+              </h3>
+              <div className="flex-1 w-full min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart margin={{ top: 10, right: 10, left: -10, bottom: 5 }} data={chartData}>
+                    <defs><filter id="line-shadow" height="150%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor={mainColor} floodOpacity="0.3"/></filter></defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="month" type="number" domain={[0, 'auto']} allowDataOverflow={false} tick={{fontSize: 10, fill: '#94a3b8', fontWeight: 600}} tickCount={8} unit="th"/>
+                    <YAxis domain={['auto', 'auto']} tick={{fontSize: 10, fill: '#94a3b8', fontWeight: 600}} width={40} unit={yLabel}/>
+                    <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                    <Legend wrapperStyle={{fontSize: '11px', paddingTop: '10px'}} iconType="circle" iconSize={8}/>
+                    <Area dataKey="sd3" stroke="none" fill={colorHigh} fillOpacity={1} name="Cao" legendType="square" isAnimationActive={false}/>
+                    <Area dataKey="sd2" stroke="none" fill={colorNormal} fillOpacity={1} name="Chuẩn" legendType="square" isAnimationActive={false}/>
+                    <Area dataKey="sd2neg" stroke="none" fill={colorRisk} fillOpacity={1} name="Nguy cơ" legendType="square" isAnimationActive={false}/>
+                    <Area dataKey="sd3neg" stroke="none" fill={colorSevere} fillOpacity={1} name="Suy dinh dưỡng" legendType="square" isAnimationActive={false}/>
+                    <Line type="basis" dataKey="sd0" stroke="#10b981" dot={false} strokeWidth={1.5} strokeDasharray="5 5" name="Trung bình" />
+                    <Line data={childData.filter(d => !d.isPreview)} dataKey="value" type="monotone" stroke={mainColor} strokeWidth={3} dot={{ r: 5, fill: '#fff', strokeWidth: 3, stroke: mainColor }} activeDot={{ r: 7, strokeWidth: 0, fill: mainColor }} name="Trẻ" connectNulls isAnimationActive={true} animationDuration={1000} filter="url(#line-shadow)"/>
+                    {previewData && <ReferenceDot x={previewData.ageMonths} y={type === 'weight' ? previewData.weight : previewData.height} r={6} fill={mainColor} stroke="#fff" strokeWidth={2} isFront={true}><animate attributeName="r" from="6" to="12" dur="1.5s" begin="0s" repeatCount="indefinite" values="6; 12; 6" /><animate attributeName="opacity" from="1" to="0.3" dur="1.5s" begin="0s" repeatCount="indefinite" values="1; 0.3; 1" /></ReferenceDot>}
+                    {previewData && <ReferenceDot x={previewData.ageMonths} y={type === 'weight' ? previewData.weight : previewData.height} r={4} fill="#fff" stroke={mainColor} strokeWidth={2} isFront={true}/>}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          );
         };
 
         const ChartGuide = () => (
-            <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-slate-200 shadow-sm mt-4 text-sm">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2 mb-3"><Info size={16} className="text-teal-600"/> Cách xem biểu đồ tăng trưởng</h3>
-                <div className="space-y-2">
-                    <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#bbf7d0] border border-green-200 shadow-sm"></div><span className="text-slate-600"><strong>Vùng Xanh:</strong> Bé phát triển bình thường.</span></div>
-                    <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#fdba74] border border-orange-200 shadow-sm"></div><span className="text-slate-600"><strong>Vùng Cam:</strong> Nguy cơ (Nhẹ cân hoặc Thừa cân).</span></div>
-                    <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#fca5a5] border border-red-200 shadow-sm"></div><span className="text-slate-600"><strong>Vùng Đỏ:</strong> Báo động (Suy dinh dưỡng hoặc Béo phì).</span></div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-slate-100 text-slate-500 text-xs italic">* Quan trọng: Nếu đường vẽ của bé <strong>đi ngang</strong> hoặc <strong>đi xuống</strong> liên tục, hãy đưa bé đi khám dinh dưỡng ngay cả khi bé vẫn nằm trong vùng xanh.</div>
-            </div>
+          <div className="bg-white/80 backdrop-blur-sm p-4 rounded-xl border border-slate-200 shadow-sm mt-4 text-sm">
+              <h3 className="font-bold text-slate-700 flex items-center gap-2 mb-3"><Info size={16} className="text-teal-600"/> Cách xem biểu đồ tăng trưởng</h3>
+              <div className="space-y-2">
+                  <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#bbf7d0] border border-green-200 shadow-sm"></div><span className="text-slate-600"><strong>Vùng Xanh:</strong> Bé phát triển bình thường.</span></div>
+                  <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#fdba74] border border-orange-200 shadow-sm"></div><span className="text-slate-600"><strong>Vùng Cam:</strong> Nguy cơ (Nhẹ cân hoặc Thừa cân).</span></div>
+                  <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#fca5a5] border border-red-200 shadow-sm"></div><span className="text-slate-600"><strong>Vùng Đỏ:</strong> Báo động (Suy dinh dưỡng hoặc Béo phì).</span></div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-100 text-slate-500 text-xs italic">* Quan trọng: Nếu đường vẽ của bé <strong>đi ngang</strong> hoặc <strong>đi xuống</strong> liên tục, hãy đưa bé đi khám dinh dưỡng ngay cả khi bé vẫn nằm trong vùng xanh.</div>
+          </div>
         );
 
-        const DateSelect = ({ label, value, onChange }: { label: string, value: string, onChange: (val: string) => void }) => {
-            const parts = value.split('-');
-            let y = parseInt(parts[0]);
-            let m = parseInt(parts[1]);
-            let d = parseInt(parts[2]);
-
-            if (isNaN(y)) y = new Date().getFullYear();
-            if (isNaN(m)) m = new Date().getMonth() + 1;
-            if (isNaN(d)) d = new Date().getDate();
-
-            const currentYear = new Date().getFullYear();
-            const years = Array.from({length: currentYear - 2015 + 2}, (_, i) => currentYear + 1 - i);
-            const getDaysInMonth = (year: number, month: number) => new Date(year, month, 0).getDate();
-            const maxDays = getDaysInMonth(y, m);
-            const days = Array.from({length: maxDays}, (_, i) => i + 1);
-            const months = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
-
-            const handleChange = (type: 'd'|'m'|'y', val: number) => {
-                let newY = y, newM = m, newD = d;
-                if (type === 'y') newY = val;
-                if (type === 'm') newM = val;
-                if (type === 'd') newD = val;
-                const newMaxDays = getDaysInMonth(newY, newM);
-                if (newD > newMaxDays) newD = newMaxDays;
-                const str = `${newY}-${String(newM).padStart(2, '0')}-${String(newD).padStart(2, '0')}`;
-                onChange(str);
-            };
-
-            return (
-                <div className="mb-2">
-                <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{label}</label>
-                <div className="flex gap-2">
-                    <div className="relative flex-1">
-                        <select value={d} onChange={(e) => handleChange('d', parseInt(e.target.value))} className="w-full p-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 cursor-pointer appearance-none shadow-sm hover:border-slate-300 transition-colors">
-                            {days.map(day => <option key={day} value={day}>{day}</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-3 text-slate-400 pointer-events-none" size={14} />
-                    </div>
-                    <div className="relative flex-[1.4]">
-                        <select value={m} onChange={(e) => handleChange('m', parseInt(e.target.value))} className="w-full p-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 cursor-pointer appearance-none shadow-sm hover:border-slate-300 transition-colors">
-                            {months.map((month, idx) => <option key={idx} value={idx + 1}>{month}</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-3 text-slate-400 pointer-events-none" size={14} />
-                    </div>
-                    <div className="relative flex-[1.2]">
-                        <select value={y} onChange={(e) => handleChange('y', parseInt(e.target.value))} className="w-full p-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 cursor-pointer appearance-none shadow-sm hover:border-slate-300 transition-colors">
-                            {years.map(year => <option key={year} value={year}>{year}</option>)}
-                        </select>
-                        <ChevronDown className="absolute right-2 top-3 text-slate-400 pointer-events-none" size={14} />
-                    </div>
-                </div>
-                </div>
-            );
+        const DateSelect = ({ label, value, onChange }) => {
+          const parts = value.split('-');
+          let y = parseInt(parts[0]); let m = parseInt(parts[1]); let d = parseInt(parts[2]);
+          if (isNaN(y)) y = new Date().getFullYear(); if (isNaN(m)) m = new Date().getMonth() + 1; if (isNaN(d)) d = new Date().getDate();
+          const currentYear = new Date().getFullYear();
+          const years = Array.from({length: currentYear - 2015 + 2}, (_, i) => currentYear + 1 - i);
+          const getDaysInMonth = (year, month) => new Date(year, month, 0).getDate();
+          const maxDays = getDaysInMonth(y, m);
+          const days = Array.from({length: maxDays}, (_, i) => i + 1);
+          const months = ["Tháng 1", "Tháng 2", "Tháng 3", "Tháng 4", "Tháng 5", "Tháng 6", "Tháng 7", "Tháng 8", "Tháng 9", "Tháng 10", "Tháng 11", "Tháng 12"];
+          const handleChange = (type, val) => {
+            let newY = y, newM = m, newD = d;
+            if (type === 'y') newY = val; if (type === 'm') newM = val; if (type === 'd') newD = val;
+            const newMaxDays = getDaysInMonth(newY, newM);
+            if (newD > newMaxDays) newD = newMaxDays;
+            onChange(`${newY}-${String(newM).padStart(2, '0')}-${String(newD).padStart(2, '0')}`);
+          };
+          return (
+            <div className="mb-2">
+              <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">{label}</label>
+              <div className="flex gap-2">
+                <div className="relative flex-1"><select value={d} onChange={(e) => handleChange('d', parseInt(e.target.value))} className="w-full p-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 cursor-pointer appearance-none shadow-sm hover:border-slate-300 transition-colors">{days.map(day => <option key={day} value={day}>{day}</option>)}</select><ChevronDown className="absolute right-2 top-3 text-slate-400 pointer-events-none" size={14} /></div>
+                <div className="relative flex-[1.4]"><select value={m} onChange={(e) => handleChange('m', parseInt(e.target.value))} className="w-full p-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 cursor-pointer appearance-none shadow-sm hover:border-slate-300 transition-colors">{months.map((month, idx) => <option key={idx} value={idx + 1}>{month}</option>)}</select><ChevronDown className="absolute right-2 top-3 text-slate-400 pointer-events-none" size={14} /></div>
+                <div className="relative flex-[1.2]"><select value={y} onChange={(e) => handleChange('y', parseInt(e.target.value))} className="w-full p-2.5 border border-slate-200 bg-white rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 cursor-pointer appearance-none shadow-sm hover:border-slate-300 transition-colors">{years.map(year => <option key={year} value={year}>{year}</option>)}</select><ChevronDown className="absolute right-2 top-3 text-slate-400 pointer-events-none" size={14} /></div>
+              </div>
+            </div>
+          );
         };
 
-        const ChildInfoSection = ({ dob, setDob, gender, setGender }: any) => (
-            <div className="bg-white/80 backdrop-blur-md p-5 rounded-2xl border border-white/50 shadow-lg shadow-slate-200/50 mb-6 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Baby size={80} className="text-slate-800" /></div>
-                <h2 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
-                    <span className="bg-indigo-100 text-indigo-600 p-1 rounded-md"><Baby size={14} /></span> Hồ sơ trẻ
-                </h2>
-                <div className="space-y-4 relative z-10">
-                    <DateSelect label="Ngày sinh" value={dob} onChange={setDob} />
-                    <div>
-                        <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Giới tính</label>
-                        <div className="flex bg-slate-100/80 p-1.5 rounded-xl gap-2">
-                            <button onClick={() => setGender('boy')} className={`flex-1 text-sm py-2.5 rounded-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 ${gender === 'boy' ? 'bg-white text-blue-600 shadow-md ring-1 ring-blue-100 scale-[1.02]' : 'text-slate-400 hover:text-slate-600'}`}>
-                                {gender === 'boy' && <CheckCircle size={14} />} Nam
-                            </button>
-                            <button onClick={() => setGender('girl')} className={`flex-1 text-sm py-2.5 rounded-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 ${gender === 'girl' ? 'bg-white text-pink-600 shadow-md ring-1 ring-pink-100 scale-[1.02]' : 'text-slate-400 hover:text-slate-600'}`}>
-                                {gender === 'girl' && <CheckCircle size={14} />} Nữ
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        const ChildInfoSection = ({ dob, setDob, gender, setGender }) => (
+          <div className="bg-white/80 backdrop-blur-md p-5 rounded-2xl border border-white/50 shadow-lg shadow-slate-200/50 mb-6 relative overflow-hidden">
+              <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none"><Baby size={80} className="text-slate-800" /></div>
+              <h2 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2"><span className="bg-indigo-100 text-indigo-600 p-1 rounded-md"><Baby size={14} /></span> Hồ sơ trẻ</h2>
+              <div className="space-y-4 relative z-10">
+                  <DateSelect label="Ngày sinh" value={dob} onChange={setDob} />
+                  <div>
+                      <label className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">Giới tính</label>
+                      <div className="flex bg-slate-100/80 p-1.5 rounded-xl gap-2">
+                          <button onClick={() => setGender('boy')} className={`flex-1 text-sm py-2.5 rounded-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 ${gender === 'boy' ? 'bg-white text-blue-600 shadow-md ring-1 ring-blue-100 scale-[1.02]' : 'text-slate-400 hover:text-slate-600'}`}>{gender === 'boy' && <CheckCircle size={14} />} Nam</button>
+                          <button onClick={() => setGender('girl')} className={`flex-1 text-sm py-2.5 rounded-lg font-bold transition-all duration-300 flex items-center justify-center gap-2 ${gender === 'girl' ? 'bg-white text-pink-600 shadow-md ring-1 ring-pink-100 scale-[1.02]' : 'text-slate-400 hover:text-slate-600'}`}>{gender === 'girl' && <CheckCircle size={14} />} Nữ</button>
+                      </div>
+                  </div>
+              </div>
+          </div>
         );
 
-        const StatusIcon = ({ status }: { status?: string }) => {
+        const StatusIcon = ({ status }) => {
             if (!status) return null;
             if (status.includes('normal')) return <CheckCircle size={16} className="text-green-500" />;
             if (status.includes('risk') || status.includes('overweight')) return <AlertCircle size={16} className="text-orange-500" />;
             return <AlertTriangle size={16} className="text-red-500" />;
         };
 
-        const InputSection = ({ formData, setFormData, onSave, onReset, isPreviewMode, wAnalysis, hAnalysis }: any) => {
-            const getInputStyle = (status?: string) => {
+        const InputSection = ({ formData, setFormData, onSave, onReset, isPreviewMode, wAnalysis, hAnalysis }) => {
+            const getInputStyle = (status) => {
                 const base = "w-full p-4 pl-4 pr-10 border rounded-xl text-lg font-bold text-slate-800 outline-none transition-all duration-300 placeholder:text-slate-300 placeholder:font-normal placeholder:text-sm shadow-sm ";
                 if (!status) return base + "border-slate-200 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10 bg-white";
                 if (status.includes('normal')) return base + "border-green-200 bg-green-50/50 focus:border-green-500 focus:ring-4 focus:ring-green-500/20";
@@ -489,264 +405,243 @@
                 if (status.includes('stunted') || status.includes('underweight') || status.includes('obese')) return base + "border-red-200 bg-red-50/50 focus:border-red-500 focus:ring-4 focus:ring-red-500/20";
                 return base + "border-slate-200";
             };
-            const getStatusText = (status?: string) => {
+            const getStatusText = (status) => {
                 if (!status) return null;
                 if (status.includes('normal')) return <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full absolute right-2 top-2">Tốt</span>;
                 if (status.includes('risk') || status.includes('overweight')) return <span className="text-[10px] font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full absolute right-2 top-2">Chú ý</span>;
                 return <span className="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full absolute right-2 top-2">Cảnh báo</span>;
             };
 
-            return (
-                <div className="bg-white/80 backdrop-blur-md p-5 rounded-2xl border border-white/50 shadow-lg shadow-slate-200/50 mb-6 relative">
-                <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2">
-                        <span className="bg-teal-100 text-teal-600 p-1 rounded-md"><Stethoscope size={14} /></span> Nhập số đo
-                    </h2>
-                    {isPreviewMode && (
-                        <span className="flex items-center gap-1.5 text-[10px] text-teal-600 font-bold bg-teal-50 px-3 py-1 rounded-full border border-teal-100 animate-pulse">
-                            <span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>Dự tính...
-                        </span>
-                    )}
-                </div>
-                <div className="space-y-6">
-                    <DateSelect label="Ngày đo" value={formData.date} onChange={(val) => setFormData({...formData, date: val})} />
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="relative group">
-                            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Cân nặng (kg)</label>
-                            <div className="relative">
-                                <input type="number" step="0.1" placeholder="0.0" value={formData.weight} onChange={(e) => setFormData({...formData, weight: e.target.value})} className={getInputStyle(wAnalysis?.status)} />
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all">{wAnalysis ? <StatusIcon status={wAnalysis.status} /> : <span className="text-slate-300 text-xs font-bold">kg</span>}</div>
-                                {getStatusText(wAnalysis?.status)}
-                            </div>
-                        </div>
-                        <div className="relative group">
-                            <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Chiều cao (cm)</label>
-                            <div className="relative">
-                                <input type="number" step="0.1" placeholder="0.0" value={formData.height} onChange={(e) => setFormData({...formData, height: e.target.value})} className={getInputStyle(hAnalysis?.status)} />
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all">{hAnalysis ? <StatusIcon status={hAnalysis.status} /> : <span className="text-slate-300 text-xs font-bold">cm</span>}</div>
-                                {getStatusText(hAnalysis?.status)}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                        <button onClick={onReset} className="flex-none w-12 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl flex items-center justify-center transition-all active:scale-95" title="Nhập lại"><RotateCcw size={20} /></button>
-                        <button onClick={onSave} disabled={!formData.weight || !formData.height} className="flex-1 bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 active:scale-[0.98] text-white py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-200 transition-all disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"><Save size={18} /> Lưu kết quả</button>
-                    </div>
-                </div>
-                </div>
-            );
+          return (
+            <div className="bg-white/80 backdrop-blur-md p-5 rounded-2xl border border-white/50 shadow-lg shadow-slate-200/50 mb-6 relative">
+              <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-2"><span className="bg-teal-100 text-teal-600 p-1 rounded-md"><Stethoscope size={14} /></span> Nhập số đo</h2>
+                  {isPreviewMode && <span className="flex items-center gap-1.5 text-[10px] text-teal-600 font-bold bg-teal-50 px-3 py-1 rounded-full border border-teal-100 animate-pulse"><span className="w-1.5 h-1.5 rounded-full bg-teal-500"></span>Dự tính...</span>}
+              </div>
+              <div className="space-y-6">
+                  <DateSelect label="Ngày đo" value={formData.date} onChange={(val) => setFormData({...formData, date: val})}/>
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="relative group">
+                          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Cân nặng (kg)</label>
+                          <div className="relative">
+                              <input type="number" step="0.1" placeholder="0.0" value={formData.weight} onChange={(e) => setFormData({...formData, weight: e.target.value})} className={getInputStyle(wAnalysis?.status)}/>
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all">{wAnalysis ? <StatusIcon status={wAnalysis.status} /> : <span className="text-slate-300 text-xs font-bold">kg</span>}</div>
+                              {getStatusText(wAnalysis?.status)}
+                          </div>
+                      </div>
+                      <div className="relative group">
+                          <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Chiều cao (cm)</label>
+                           <div className="relative">
+                              <input type="number" step="0.1" placeholder="0.0" value={formData.height} onChange={(e) => setFormData({...formData, height: e.target.value})} className={getInputStyle(hAnalysis?.status)}/>
+                               <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all">{hAnalysis ? <StatusIcon status={hAnalysis.status} /> : <span className="text-slate-300 text-xs font-bold">cm</span>}</div>
+                              {getStatusText(hAnalysis?.status)}
+                           </div>
+                      </div>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                      <button onClick={onReset} className="flex-none w-12 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl flex items-center justify-center transition-all active:scale-95" title="Nhập lại"><RotateCcw size={20} /></button>
+                      <button onClick={onSave} disabled={!formData.weight || !formData.height} className="flex-1 bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-700 hover:to-slate-800 active:scale-[0.98] text-white py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 shadow-xl shadow-slate-200 transition-all disabled:opacity-50 disabled:shadow-none disabled:cursor-not-allowed disabled:transform-none"><Save size={18} /> Lưu kết quả</button>
+                  </div>
+              </div>
+          </div>
+          );
         };
 
-        const AnalysisSection = ({ currentData, wAnalysis, hAnalysis, aiAdvice, setAiAdvice, loadingAdvice, generateAdvice }: any) => (
-            <div className="space-y-4 mb-20 md:mb-0 animate-in slide-in-from-bottom-4 duration-500">
-                {(wAnalysis || hAnalysis) ? (
-                    <div className="grid grid-cols-1 gap-4">
-                        <div className="flex items-center justify-between px-1">
-                            <div className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                                <div className={`w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-sm ${currentData?.isPreview ? 'bg-teal-500 animate-pulse' : 'bg-slate-400'}`}></div>
-                                {currentData?.isPreview ? 'Phân tích trực tiếp...' : `Kết quả (${currentData?.ageMonths} tháng)`}
-                            </div>
-                        </div>
-                        {wAnalysis && (
-                            <div className={`p-5 rounded-2xl border shadow-sm transition-all duration-500 ${wAnalysis.status === 'normal' ? 'bg-green-50/50 border-green-100' : wAnalysis.status.includes('risk') ? 'bg-orange-50/50 border-orange-100' : 'bg-red-50/50 border-red-100'}`}>
-                                <div className="flex justify-between items-start mb-3">
-                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                        <span className={`w-1.5 h-4 rounded-full ${wAnalysis.status === 'normal' ? 'bg-green-400' : wAnalysis.status.includes('risk') ? 'bg-orange-400' : 'bg-red-400'}`}></span> Cân nặng
-                                    </span>
-                                    <span className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded-lg border shadow-sm ${wAnalysis.status === 'normal' ? 'bg-white text-green-700 border-green-100' : wAnalysis.status.includes('risk') ? 'bg-white text-orange-700 border-orange-100' : 'bg-white text-red-700 border-red-100'}`}>{wAnalysis.message}</span>
-                                </div>
-                                <div className="flex items-baseline gap-1.5 mb-2"><span className="text-3xl font-black text-slate-800 tracking-tight">{currentData.weight}</span><span className="text-sm font-bold text-slate-400">kg</span></div>
-                                <ZScoreGauge zScore={wAnalysis.zScore} label="" />
-                            </div>
-                        )}
-                        {hAnalysis && (
-                            <div className={`p-5 rounded-2xl border shadow-sm transition-all duration-500 ${hAnalysis.status === 'normal' ? 'bg-green-50/50 border-green-100' : hAnalysis.status.includes('risk') ? 'bg-orange-50/50 border-orange-100' : 'bg-red-50/50 border-red-100'}`}>
-                                <div className="flex justify-between items-start mb-3">
-                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                                        <span className={`w-1.5 h-4 rounded-full ${hAnalysis.status === 'normal' ? 'bg-green-400' : hAnalysis.status.includes('risk') ? 'bg-orange-400' : 'bg-red-400'}`}></span> Chiều cao
-                                    </span>
-                                    <span className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded-lg border shadow-sm ${hAnalysis.status === 'normal' ? 'bg-white text-green-700 border-green-100' : hAnalysis.status.includes('risk') ? 'bg-white text-orange-700 border-orange-100' : 'bg-white text-red-700 border-red-100'}`}>{hAnalysis.message}</span>
-                                </div>
-                                <div className="flex items-baseline gap-1.5 mb-2"><span className="text-3xl font-black text-slate-800 tracking-tight">{currentData.height}</span><span className="text-sm font-bold text-slate-400">cm</span></div>
-                                <ZScoreGauge zScore={hAnalysis.zScore} label="" />
-                            </div>
-                        )}
-                        {!aiAdvice ? (
-                            <button onClick={generateAdvice} disabled={loadingAdvice} className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white py-4 rounded-2xl text-sm font-bold shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 mt-2 active:scale-[0.98]">
-                                {loadingAdvice ? <span className="animate-pulse">Đang kết nối bác sĩ AI...</span> : <><Activity size={18}/> Xin lời khuyên dinh dưỡng</>}
-                            </button>
-                        ) : (
-                            <div className="bg-white p-6 rounded-2xl border border-indigo-100 mt-2 text-sm text-slate-700 leading-relaxed whitespace-pre-line shadow-lg shadow-indigo-50/50 animate-in fade-in zoom-in-95 duration-300">
-                                <div className="flex items-center gap-2 mb-4 font-bold text-indigo-700 pb-3 border-b border-indigo-50"><div className="p-2 bg-indigo-100 rounded-lg"><Activity size={18}/></div> Lời khuyên từ chuyên gia</div>
-                                {aiAdvice}
-                                <button onClick={() => setAiAdvice('')} className="block mt-6 text-xs text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 py-2.5 px-5 rounded-xl font-bold ml-auto transition-colors">Đóng lời khuyên</button>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-3xl border border-dashed border-slate-300 mx-4 md:mx-0">
-                        <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-4"><Stethoscope size={32} className="text-slate-300"/></div>
-                        <p className="text-sm text-slate-500 font-medium">Nhập cân nặng & chiều cao<br/>để xem kết quả ngay</p>
-                    </div>
-                )}
-            </div>
+        const AnalysisSection = ({ currentData, wAnalysis, hAnalysis, aiAdvice, setAiAdvice, loadingAdvice, generateAdvice }) => (
+          <div className="space-y-4 mb-20 md:mb-0 animate-in slide-in-from-bottom-4 duration-500">
+              {(wAnalysis || hAnalysis) ? (
+                  <div className="grid grid-cols-1 gap-4">
+                       <div className="flex items-center justify-between px-1"><div className="text-sm font-bold text-slate-700 flex items-center gap-2"><div className={`w-2.5 h-2.5 rounded-full ring-2 ring-white shadow-sm ${currentData?.isPreview ? 'bg-teal-500 animate-pulse' : 'bg-slate-400'}`}></div>{currentData?.isPreview ? 'Phân tích trực tiếp...' : `Kết quả (${currentData?.ageMonths} tháng)`}</div></div>
+                      {wAnalysis && (
+                          <div className={`p-5 rounded-2xl border shadow-sm transition-all duration-500 ${wAnalysis.status === 'normal' ? 'bg-green-50/50 border-green-100' : wAnalysis.status.includes('risk') ? 'bg-orange-50/50 border-orange-100' : 'bg-red-50/50 border-red-100'}`}>
+                              <div className="flex justify-between items-start mb-3">
+                                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><span className={`w-1.5 h-4 rounded-full ${wAnalysis.status === 'normal' ? 'bg-green-400' : wAnalysis.status.includes('risk') ? 'bg-orange-400' : 'bg-red-400'}`}></span>Cân nặng</span>
+                                  <span className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded-lg border shadow-sm ${wAnalysis.status === 'normal' ? 'bg-white text-green-700 border-green-100' : wAnalysis.status.includes('risk') ? 'bg-white text-orange-700 border-orange-100' : 'bg-white text-red-700 border-red-100'}`}>{wAnalysis.message}</span>
+                              </div>
+                              <div className="flex items-baseline gap-1.5 mb-2"><span className="text-3xl font-black text-slate-800 tracking-tight">{currentData.weight}</span><span className="text-sm font-bold text-slate-400">kg</span></div>
+                              <ZScoreGauge zScore={wAnalysis.zScore} label="" />
+                          </div>
+                      )}
+                      {hAnalysis && (
+                          <div className={`p-5 rounded-2xl border shadow-sm transition-all duration-500 ${hAnalysis.status === 'normal' ? 'bg-green-50/50 border-green-100' : hAnalysis.status.includes('risk') ? 'bg-orange-50/50 border-orange-100' : 'bg-red-50/50 border-red-100'}`}>
+                              <div className="flex justify-between items-start mb-3">
+                                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5"><span className={`w-1.5 h-4 rounded-full ${hAnalysis.status === 'normal' ? 'bg-green-400' : hAnalysis.status.includes('risk') ? 'bg-orange-400' : 'bg-red-400'}`}></span>Chiều cao</span>
+                                   <span className={`text-[10px] uppercase font-bold px-2.5 py-1 rounded-lg border shadow-sm ${hAnalysis.status === 'normal' ? 'bg-white text-green-700 border-green-100' : hAnalysis.status.includes('risk') ? 'bg-white text-orange-700 border-orange-100' : 'bg-white text-red-700 border-red-100'}`}>{hAnalysis.message}</span>
+                              </div>
+                              <div className="flex items-baseline gap-1.5 mb-2"><span className="text-3xl font-black text-slate-800 tracking-tight">{currentData.height}</span><span className="text-sm font-bold text-slate-400">cm</span></div>
+                              <ZScoreGauge zScore={hAnalysis.zScore} label="" />
+                          </div>
+                      )}
+                      {!aiAdvice ? (
+                           <button onClick={generateAdvice} disabled={loadingAdvice} className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-[length:200%_auto] hover:bg-right transition-all duration-500 text-white py-4 rounded-2xl text-sm font-bold shadow-lg shadow-indigo-200 flex justify-center items-center gap-2 mt-2 active:scale-[0.98]">{loadingAdvice ? <span className="animate-pulse">Đang kết nối bác sĩ AI...</span> : <><Activity size={18}/> Xin lời khuyên dinh dưỡng</>}</button>
+                      ) : (
+                          <div className="bg-white p-6 rounded-2xl border border-indigo-100 mt-2 text-sm text-slate-700 leading-relaxed whitespace-pre-line shadow-lg shadow-indigo-50/50 animate-in fade-in zoom-in-95 duration-300">
+                              <div className="flex items-center gap-2 mb-4 font-bold text-indigo-700 pb-3 border-b border-indigo-50"><div className="p-2 bg-indigo-100 rounded-lg"><Activity size={18}/></div>Lời khuyên từ chuyên gia</div>{aiAdvice}<button onClick={() => setAiAdvice('')} className="block mt-6 text-xs text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 py-2.5 px-5 rounded-xl font-bold ml-auto transition-colors">Đóng lời khuyên</button>
+                          </div>
+                      )}
+                  </div>
+              ) : (
+                  <div className="text-center py-16 bg-white/50 backdrop-blur-sm rounded-3xl border border-dashed border-slate-300 mx-4 md:mx-0">
+                      <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-4"><Stethoscope size={32} className="text-slate-300"/></div>
+                      <p className="text-sm text-slate-500 font-medium">Nhập cân nặng & chiều cao<br/>để xem kết quả ngay</p>
+                  </div>
+              )}
+          </div>
         );
 
+        // --- MAIN APP COMPONENT ---
         const App = () => {
-            type TabView = 'home' | 'charts' | 'history';
-            const [activeTab, setActiveTab] = useState<TabView>('home');
-            const [records, setRecords] = useState<GrowthRecord[]>([]);
-            const [dob, setDob] = useState<string>('2023-01-01');
-            const [gender, setGender] = useState<Gender>('boy');
-            const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], weight: '', height: '' });
-            const [loadingAdvice, setLoadingAdvice] = useState(false);
-            const [aiAdvice, setAiAdvice] = useState<string>('');
-            const [mobileChartType, setMobileChartType] = useState<'weight' | 'height'>('weight');
+          const [activeTab, setActiveTab] = useState('home');
+          const [records, setRecords] = useState([]);
+          const [dob, setDob] = useState('2023-01-01');
+          const [gender, setGender] = useState('boy');
+          const [formData, setFormData] = useState({ date: new Date().toISOString().split('T')[0], weight: '', height: '' });
+          const [loadingAdvice, setLoadingAdvice] = useState(false);
+          const [aiAdvice, setAiAdvice] = useState('');
+          const [mobileChartType, setMobileChartType] = useState('weight');
 
-            const handleAddRecord = () => {
-                if (!formData.weight || !formData.height) return;
+          const handleAddRecord = () => {
+            if (!formData.weight || !formData.height) return;
+            const age = calculateAgeMonths(dob, formData.date);
+            const newRecord = {
+              id: Date.now().toString(),
+              date: formData.date,
+              ageMonths: age < 0 ? 0 : age,
+              weight: parseFloat(formData.weight),
+              height: parseFloat(formData.height)
+            };
+            setRecords(prev => [...prev, newRecord].sort((a,b) => a.ageMonths - b.ageMonths));
+            setFormData(prev => ({ ...prev, weight: '', height: '' })); 
+            setAiAdvice('');
+          };
+          const handleReset = () => { setFormData(prev => ({ ...prev, weight: '', height: '' })); };
+          const handleDelete = (id) => { setRecords(prev => prev.filter(r => r.id !== id)); };
+          const handleShare = async () => {
+            if (navigator.share && currentData) {
+              try { await navigator.share({ title: 'Hồ sơ sức khỏe bé', text: `Bé ${currentData.ageMonths} tháng: ${currentData.weight}kg, ${currentData.height}cm.`, url: window.location.href }); } catch (err) { console.log(err); }
+            }
+          };
+
+          const isPreviewMode = formData.weight !== '' || formData.height !== '';
+          const currentData = useMemo(() => {
+            if (isPreviewMode) {
                 const age = calculateAgeMonths(dob, formData.date);
-                const newRecord: GrowthRecord = { id: Date.now().toString(), date: formData.date, ageMonths: age < 0 ? 0 : age, weight: parseFloat(formData.weight), height: parseFloat(formData.height) };
-                setRecords(prev => [...prev, newRecord].sort((a,b) => a.ageMonths - b.ageMonths));
-                setFormData(prev => ({ ...prev, weight: '', height: '' })); 
-                setAiAdvice('');
-            };
-            const handleReset = () => { setFormData(prev => ({ ...prev, weight: '', height: '' })); };
-            const handleDelete = (id: string) => { setRecords(prev => prev.filter(r => r.id !== id)); };
-            
-            const isPreviewMode = formData.weight !== '' || formData.height !== '';
-            const currentData = useMemo(() => {
-                if (isPreviewMode) {
-                    const age = calculateAgeMonths(dob, formData.date);
-                    const w = parseFloat(formData.weight);
-                    const h = parseFloat(formData.height);
-                    return { ageMonths: age < 0 ? 0 : age, weight: isNaN(w) ? 0 : w, height: isNaN(h) ? 0 : h, isPreview: true };
-                } else if (records.length > 0) {
-                    const latest = records[records.length - 1];
-                    return { ...latest, isPreview: false };
-                }
-                return null;
-            }, [formData, dob, records, isPreviewMode]);
+                const w = parseFloat(formData.weight);
+                const h = parseFloat(formData.height);
+                return { ageMonths: age < 0 ? 0 : age, weight: isNaN(w) ? 0 : w, height: isNaN(h) ? 0 : h, isPreview: true };
+            } else if (records.length > 0) {
+                const latest = records[records.length - 1];
+                return { ...latest, isPreview: false };
+            }
+            return null;
+          }, [formData, dob, records, isPreviewMode]);
 
-            const wAnalysis = currentData && currentData.weight > 0 ? analyzeGrowth(currentData.ageMonths, currentData.weight, gender, 'weight') : null;
-            const hAnalysis = currentData && currentData.height > 0 ? analyzeGrowth(currentData.ageMonths, currentData.height, gender, 'height') : null;
-            
-            const generateAdvice = async () => {
-                if (!currentData || !wAnalysis || !hAnalysis) return;
-                setLoadingAdvice(true);
-                const advice = await getGeminiAdvice(currentData.ageMonths, gender, currentData.weight, currentData.height, wAnalysis, hAnalysis);
-                setAiAdvice(advice);
-                setLoadingAdvice(false);
-            };
+          const wAnalysis = currentData && currentData.weight > 0 ? analyzeGrowth(currentData.ageMonths, currentData.weight, gender, 'weight') : null;
+          const hAnalysis = currentData && currentData.height > 0 ? analyzeGrowth(currentData.ageMonths, currentData.height, gender, 'height') : null;
+          const generateAdvice = async () => {
+            if (!currentData || !wAnalysis || !hAnalysis) return;
+            setLoadingAdvice(true);
+            const advice = await getGeminiAdvice(currentData.ageMonths, gender, currentData.weight, currentData.height, wAnalysis, hAnalysis);
+            setAiAdvice(advice);
+            setLoadingAdvice(false);
+          };
 
-            const handleShare = async () => {
-                if (navigator.share && currentData) {
-                    try { await navigator.share({ title: 'Hồ sơ sức khỏe bé', text: `Bé ${currentData.ageMonths} tháng: ${currentData.weight}kg, ${currentData.height}cm.`, url: window.location.href }); } catch (err) { console.log(err); }
-                }
-            };
-
-            return (
-                <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col md:flex-row max-w-7xl mx-auto selection:bg-teal-100">
-                <div className="hidden md:flex w-full h-screen">
-                    <div className="w-[420px] bg-white border-r border-slate-200 p-8 overflow-y-auto h-full sticky top-0 custom-scrollbar z-10 shadow-xl shadow-slate-200/50">
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className="bg-teal-600 p-3 rounded-2xl text-white shadow-lg shadow-teal-200"><Activity size={28} /></div>
-                            <div><h1 className="text-2xl font-black text-slate-800 tracking-tight">WHO Growth</h1><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Theo dõi chuẩn y khoa</p></div>
-                        </div>
-                        <ChildInfoSection dob={dob} setDob={setDob} gender={gender} setGender={setGender} />
-                        <InputSection formData={formData} setFormData={setFormData} onSave={handleAddRecord} onReset={handleReset} isPreviewMode={isPreviewMode} wAnalysis={wAnalysis} hAnalysis={hAnalysis} />
-                        <div className="mt-8">
-                            <h2 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2"><History size={14}/> Lịch sử đo gần đây</h2>
-                            <div className="space-y-3">
-                                {records.slice().reverse().map(r => (
-                                    <div key={r.id} className="flex justify-between items-center p-4 bg-white border border-slate-100 rounded-2xl text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-default group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center font-bold text-slate-400 text-xs shadow-inner">{r.ageMonths}t</div>
-                                            <div><span className="font-bold block text-slate-700 text-base">{new Date(r.date).toLocaleDateString('vi-VN')}</span><span className="text-slate-500 text-xs font-semibold mt-0.5 block">{r.weight}kg <span className="mx-1 text-slate-300">|</span> {r.height}cm</span></div>
-                                        </div>
-                                        <button onClick={() => handleDelete(r.id)} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
+          return (
+            <div className="min-h-screen bg-slate-50 font-sans text-slate-900 flex flex-col md:flex-row max-w-7xl mx-auto selection:bg-teal-100">
+              
+              {/* DESKTOP SIDEBAR */}
+              <div className="hidden md:flex w-full h-screen">
+                  <div className="w-[420px] bg-white border-r border-slate-200 p-8 overflow-y-auto h-full sticky top-0 custom-scrollbar z-10 shadow-xl shadow-slate-200/50">
+                     <div className="flex items-center gap-4 mb-8"><div className="bg-teal-600 p-3 rounded-2xl text-white shadow-lg shadow-teal-200"><Activity size={28} /></div><div><h1 className="text-2xl font-black text-slate-800 tracking-tight">WHO Growth</h1><p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Theo dõi chuẩn y khoa</p></div></div>
+                     <ChildInfoSection dob={dob} setDob={setDob} gender={gender} setGender={setGender} />
+                     <InputSection formData={formData} setFormData={setFormData} onSave={handleAddRecord} onReset={handleReset} isPreviewMode={isPreviewMode} wAnalysis={wAnalysis} hAnalysis={hAnalysis} />
+                     <div className="mt-8">
+                        <h2 className="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2"><History size={14}/> Lịch sử đo gần đây</h2>
+                        <div className="space-y-3">
+                            {records.slice().reverse().map(r => (
+                                <div key={r.id} className="flex justify-between items-center p-4 bg-white border border-slate-100 rounded-2xl text-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-default group">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center font-bold text-slate-400 text-xs shadow-inner">{r.ageMonths}t</div>
+                                        <div><span className="font-bold block text-slate-700 text-base">{new Date(r.date).toLocaleDateString('vi-VN')}</span><span className="text-slate-500 text-xs font-semibold mt-0.5 block">{r.weight}kg <span className="mx-1 text-slate-300">|</span> {r.height}cm</span></div>
                                     </div>
-                                ))}
-                                {records.length === 0 && <div className="text-center text-xs text-slate-300 py-6 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">Chưa có dữ liệu lịch sử</div>}
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex-1 p-10 overflow-y-auto bg-slate-50/50 custom-scrollbar">
-                        <div className="max-w-4xl mx-auto">
-                            <AnalysisSection currentData={currentData} wAnalysis={wAnalysis} hAnalysis={hAnalysis} aiAdvice={aiAdvice} setAiAdvice={setAiAdvice} loadingAdvice={loadingAdvice} generateAdvice={generateAdvice} />
-                            <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
-                                <div className="bg-white p-1 rounded-3xl shadow-sm border border-slate-100">
-                                    <GrowthChart records={records} gender={gender} type="weight" previewData={isPreviewMode ? currentData : null} />
-                                    <div className="px-4 pb-4"><ChartGuide /></div>
+                                    <button onClick={() => handleDelete(r.id)} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full opacity-0 group-hover:opacity-100 transition-all"><Trash2 size={16}/></button>
                                 </div>
-                                <div className="bg-white p-1 rounded-3xl shadow-sm border border-slate-100">
-                                    <GrowthChart records={records} gender={gender} type="height" previewData={isPreviewMode ? currentData : null} />
-                                    <div className="px-4 pb-4"><ChartGuide /></div>
-                                </div>
-                            </div>
+                            ))}
+                            {records.length === 0 && <div className="text-center text-xs text-slate-300 py-6 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">Chưa có dữ liệu lịch sử</div>}
                         </div>
-                    </div>
-                </div>
+                     </div>
+                  </div>
+                  <div className="flex-1 p-10 overflow-y-auto bg-slate-50/50 custom-scrollbar">
+                     <div className="max-w-4xl mx-auto">
+                        <AnalysisSection currentData={currentData} wAnalysis={wAnalysis} hAnalysis={hAnalysis} aiAdvice={aiAdvice} setAiAdvice={setAiAdvice} loadingAdvice={loadingAdvice} generateAdvice={generateAdvice} />
+                        <div className="mt-10 grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10">
+                            <div className="bg-white p-1 rounded-3xl shadow-sm border border-slate-100"><GrowthChart records={records} gender={gender} type="weight" previewData={isPreviewMode ? currentData : null} /><div className="px-4 pb-4"><ChartGuide /></div></div>
+                            <div className="bg-white p-1 rounded-3xl shadow-sm border border-slate-100"><GrowthChart records={records} gender={gender} type="height" previewData={isPreviewMode ? currentData : null} /><div className="px-4 pb-4"><ChartGuide /></div></div>
+                        </div>
+                     </div>
+                  </div>
+              </div>
 
-                <div className="md:hidden flex flex-col h-screen w-full bg-slate-50">
-                    <div className="bg-white/90 backdrop-blur-md px-5 py-4 border-b border-slate-200 sticky top-0 z-30 flex justify-between items-center shadow-sm">
-                        <div className="flex items-center gap-3"><div className="bg-teal-600 p-2 rounded-xl text-white shadow-lg shadow-teal-200"><Activity size={20} /></div><div><h1 className="font-black text-lg text-slate-800 leading-none">WHO Growth</h1></div></div>
-                        <button onClick={handleShare} className="p-2.5 text-slate-400 hover:bg-slate-100 rounded-full active:scale-90 transition-all"><Share2 size={20}/></button>
-                    </div>
-                    <div className="flex-1 overflow-y-auto p-4 pb-28 bg-slate-50 scroll-smooth">
-                        {activeTab === 'home' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                <ChildInfoSection dob={dob} setDob={setDob} gender={gender} setGender={setGender} />
-                                <InputSection formData={formData} setFormData={setFormData} onSave={handleAddRecord} onReset={handleReset} isPreviewMode={isPreviewMode} wAnalysis={wAnalysis} hAnalysis={hAnalysis} />
-                                <AnalysisSection currentData={currentData} wAnalysis={wAnalysis} hAnalysis={hAnalysis} aiAdvice={aiAdvice} setAiAdvice={setAiAdvice} loadingAdvice={loadingAdvice} generateAdvice={generateAdvice} />
-                            </div>
-                        )}
-                        {activeTab === 'charts' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
-                                <div className="flex bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200 mb-2 sticky top-2 z-20 mx-1">
-                                    <button onClick={() => setMobileChartType('weight')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${mobileChartType === 'weight' ? 'bg-teal-50 text-teal-700 shadow-sm ring-1 ring-teal-100' : 'text-slate-400 hover:bg-slate-50'}`}>Cân nặng</button>
-                                    <button onClick={() => setMobileChartType('height')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${mobileChartType === 'height' ? 'bg-teal-50 text-teal-700 shadow-sm ring-1 ring-teal-100' : 'text-slate-400 hover:bg-slate-50'}`}>Chiều cao</button>
-                                </div>
-                                <div className="bg-white rounded-3xl p-1 shadow-sm border border-slate-100 overflow-hidden">
-                                    {(records.length > 0 || isPreviewMode) ? (
-                                        <div className="h-[auto] min-h-[60vh]">
-                                            <GrowthChart records={records} gender={gender} type={mobileChartType} previewData={isPreviewMode ? currentData : null} />
-                                            <div className="px-4 pb-4"><ChartGuide /></div>
-                                            <p className="text-center text-xs text-slate-400 mt-4 mb-4 italic bg-slate-50 py-2 rounded-lg mx-6 border border-slate-100">Xoay ngang điện thoại để xem biểu đồ rộng hơn</p>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-20 text-slate-400"><BarChart2 size={48} className="mx-auto mb-3 opacity-20"/><p>Chưa có dữ liệu để vẽ biểu đồ.</p><button onClick={() => setActiveTab('home')} className="mt-4 text-teal-600 font-bold text-sm bg-teal-50 px-4 py-2 rounded-full">Quay lại nhập liệu</button></div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                        {activeTab === 'history' && (
-                            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
-                                <div className="flex justify-between items-end mb-4 px-2"><h2 className="text-base font-bold text-slate-700">Lịch sử đo ({records.length})</h2></div>
-                                {records.length === 0 ? (
-                                    <div className="text-center text-slate-400 py-16 text-sm bg-white rounded-3xl border border-dashed border-slate-200"><History size={48} className="mx-auto mb-4 opacity-20"/>Chưa có bản ghi nào.</div>
+              {/* MOBILE LAYOUT */}
+              <div className="md:hidden flex flex-col h-screen w-full bg-slate-50">
+                 <div className="bg-white/90 backdrop-blur-md px-5 py-4 border-b border-slate-200 sticky top-0 z-30 flex justify-between items-center shadow-sm">
+                     <div className="flex items-center gap-3"><div className="bg-teal-600 p-2 rounded-xl text-white shadow-lg shadow-teal-200"><Activity size={20} /></div><div><h1 className="font-black text-lg text-slate-800 leading-none">WHO Growth</h1></div></div>
+                     <button onClick={handleShare} className="p-2.5 text-slate-400 hover:bg-slate-100 rounded-full active:scale-90 transition-all"><Share2 size={20}/></button>
+                 </div>
+                 <div className="flex-1 overflow-y-auto p-4 pb-28 bg-slate-50 scroll-smooth">
+                     {activeTab === 'home' && (
+                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                             <ChildInfoSection dob={dob} setDob={setDob} gender={gender} setGender={setGender} />
+                             <InputSection formData={formData} setFormData={setFormData} onSave={handleAddRecord} onReset={handleReset} isPreviewMode={isPreviewMode} wAnalysis={wAnalysis} hAnalysis={hAnalysis} />
+                             <AnalysisSection currentData={currentData} wAnalysis={wAnalysis} hAnalysis={hAnalysis} aiAdvice={aiAdvice} setAiAdvice={setAiAdvice} loadingAdvice={loadingAdvice} generateAdvice={generateAdvice} />
+                         </div>
+                     )}
+                     {activeTab === 'charts' && (
+                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
+                             <div className="flex bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200 mb-2 sticky top-2 z-20 mx-1">
+                                <button onClick={() => setMobileChartType('weight')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${mobileChartType === 'weight' ? 'bg-teal-50 text-teal-700 shadow-sm ring-1 ring-teal-100' : 'text-slate-400 hover:bg-slate-50'}`}>Cân nặng</button>
+                                <button onClick={() => setMobileChartType('height')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all duration-300 ${mobileChartType === 'height' ? 'bg-teal-50 text-teal-700 shadow-sm ring-1 ring-teal-100' : 'text-slate-400 hover:bg-slate-50'}`}>Chiều cao</button>
+                             </div>
+                             <div className="bg-white rounded-3xl p-1 shadow-sm border border-slate-100 overflow-hidden">
+                                {(records.length > 0 || isPreviewMode) ? (
+                                    <div className="h-[auto] min-h-[60vh]">
+                                        <GrowthChart records={records} gender={gender} type={mobileChartType} previewData={isPreviewMode ? currentData : null} />
+                                        <div className="px-4 pb-4"><ChartGuide /></div>
+                                        <p className="text-center text-xs text-slate-400 mt-4 mb-4 italic bg-slate-50 py-2 rounded-lg mx-6 border border-slate-100">Xoay ngang điện thoại để xem biểu đồ rộng hơn</p>
+                                    </div>
                                 ) : (
-                                    records.slice().reverse().map((r, idx) => (
-                                        <div key={r.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center active:scale-[0.98] transition-all">
-                                            <div>
-                                                <div className="flex items-center gap-3 mb-2"><span className="font-bold text-slate-800 text-lg">{new Date(r.date).toLocaleDateString('vi-VN')}</span><span className="bg-slate-100 text-slate-500 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wide border border-slate-200">{r.ageMonths} tháng</span></div>
-                                                <div className="text-sm text-slate-600 font-medium flex items-center gap-4"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400"></span><span className="font-bold text-slate-800">{r.weight}</span> kg</span><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400"></span><span className="font-bold text-slate-800">{r.height}</span> cm</span></div>
-                                            </div>
-                                            <button onClick={() => handleDelete(r.id)} className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={20} /></button>
-                                        </div>
-                                    ))
+                                    <div className="text-center py-20 text-slate-400"><BarChart2 size={48} className="mx-auto mb-3 opacity-20"/><p>Chưa có dữ liệu để vẽ biểu đồ.</p><button onClick={() => setActiveTab('home')} className="mt-4 text-teal-600 font-bold text-sm bg-teal-50 px-4 py-2 rounded-full">Quay lại nhập liệu</button></div>
                                 )}
-                            </div>
-                        )}
-                    </div>
-                    <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200/60 px-6 py-2 flex justify-between items-center z-30 pb-safe shadow-[0_-10px_20px_rgba(0,0,0,0.03)]">
-                        <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all duration-300 ${activeTab === 'home' ? 'text-teal-600 bg-teal-50 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}><Home size={24} strokeWidth={activeTab === 'home' ? 3 : 2} className="transition-all" /><span className="text-[10px] font-bold">Nhập liệu</span></button>
-                        <button onClick={() => setActiveTab('charts')} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all duration-300 ${activeTab === 'charts' ? 'text-teal-600 bg-teal-50 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}><BarChart2 size={24} strokeWidth={activeTab === 'charts' ? 3 : 2} className="transition-all" /><span className="text-[10px] font-bold">Biểu đồ</span></button>
-                        <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all duration-300 ${activeTab === 'history' ? 'text-teal-600 bg-teal-50 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}><History size={24} strokeWidth={activeTab === 'history' ? 3 : 2} className="transition-all" /><span className="text-[10px] font-bold">Lịch sử</span></button>
-                    </div>
-                </div>
-                </div>
-            );
+                             </div>
+                         </div>
+                     )}
+                     {activeTab === 'history' && (
+                         <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-3">
+                             <div className="flex justify-between items-end mb-4 px-2"><h2 className="text-base font-bold text-slate-700">Lịch sử đo ({records.length})</h2></div>
+                             {records.length === 0 ? (
+                                 <div className="text-center text-slate-400 py-16 text-sm bg-white rounded-3xl border border-dashed border-slate-200"><History size={48} className="mx-auto mb-4 opacity-20"/>Chưa có bản ghi nào.</div>
+                             ) : (
+                                 records.slice().reverse().map((r, idx) => (
+                                     <div key={r.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center active:scale-[0.98] transition-all">
+                                         <div>
+                                             <div className="flex items-center gap-3 mb-2"><span className="font-bold text-slate-800 text-lg">{new Date(r.date).toLocaleDateString('vi-VN')}</span><span className="bg-slate-100 text-slate-500 text-[10px] px-2.5 py-1 rounded-full font-bold uppercase tracking-wide border border-slate-200">{r.ageMonths} tháng</span></div>
+                                             <div className="text-sm text-slate-600 font-medium flex items-center gap-4"><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-400"></span><span className="font-bold text-slate-800">{r.weight}</span> kg</span><span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-400"></span><span className="font-bold text-slate-800">{r.height}</span> cm</span></div>
+                                         </div>
+                                         <button onClick={() => handleDelete(r.id)} className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"><Trash2 size={20} /></button>
+                                     </div>
+                                 ))
+                             )}
+                         </div>
+                     )}
+                 </div>
+                 <div className="fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200/60 px-6 py-2 flex justify-between items-center z-30 pb-safe shadow-[0_-10px_20px_rgba(0,0,0,0.03)]">
+                     <button onClick={() => setActiveTab('home')} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all duration-300 ${activeTab === 'home' ? 'text-teal-600 bg-teal-50 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}><Home size={24} strokeWidth={activeTab === 'home' ? 3 : 2} className="transition-all" /><span className="text-[10px] font-bold">Nhập liệu</span></button>
+                     <button onClick={() => setActiveTab('charts')} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all duration-300 ${activeTab === 'charts' ? 'text-teal-600 bg-teal-50 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}><BarChart2 size={24} strokeWidth={activeTab === 'charts' ? 3 : 2} className="transition-all" /><span className="text-[10px] font-bold">Biểu đồ</span></button>
+                     <button onClick={() => setActiveTab('history')} className={`flex flex-col items-center gap-1 p-2 rounded-2xl transition-all duration-300 ${activeTab === 'history' ? 'text-teal-600 bg-teal-50 -translate-y-1' : 'text-slate-400 hover:text-slate-600'}`}><History size={24} strokeWidth={activeTab === 'history' ? 3 : 2} className="transition-all" /><span className="text-[10px] font-bold">Lịch sử</span></button>
+                 </div>
+              </div>
+            </div>
+          );
         };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
