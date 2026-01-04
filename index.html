@@ -5,57 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0d9488">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Sổ Sức Khỏe">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>WHO Growth Tracker</title>
+    <title>Sổ Sức Khỏe</title>
     
-    <!-- 1. CDN Libraries -->
+    <!-- 1. MANIFEST & ICONS SETUP (EXECUTE IMMEDIATELY) -->
+    <script>
+        (function() {
+            // Icon dữ liệu dạng Base64 (Hình trái tim y tế - Đảm bảo luôn hiện đẹp)
+            const appIcon = `data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj48cGF0aCBkPSJNMCAyNTZDMCAxMTQuNiAxMTQuNiAwIDI1NiAwczI1NiAxMTQuNiAyNTYgMjU2LTExNC42IDI1Ni0yNTYgMjU2UzAgMzk3LjQgMCAyNTZ6IiBmaWxsPSIjMGRhOTg4Ii8+PHBhdGggZD0iTTM2OS44IDE3NS4yYzQ1LjYgNDUuNiA0NS42IDExOS41IDAgMTY1LjEtNDMuNyA0My43LTExMy4zIDQ1LjUtMTU5LjMgMjIuNi0xNC4yLTctMjcuNy0xNi41LTM5LjYtMjguNC0xMS45IDExLjktMjUuNCAyMS40LTM5LjYgMjguNC00NiAyMi45LTExNS42IDIxLjEtMTU5LjMtMjIuNi00NS42LTQ1LjYtNDUuNi0xMTkuNSAwLTE2NS4xIDQyLjYtNDIuNiAxMTAuNS00NS4xIDE1Ni04LjIgOC41IDYuOSAxOSAxNi42IDI4LjIgMjUuOSA5LjMtOS4zIDE5LjctMTkgMjguMi0yNS45IDQ1LjUtMzYuOSAxMTMuNC0zNC40IDE1NiA4LjJ6IiBmaWxsPSIjZmZmZmZmIiB0cmFuc2Zvcm09InRyYW5zbGF0ZSg1MyA1Mykgc2NhbGUoMC44KSIvPjwvc3ZnPg==`;
+
+            // Tạo Favicon & Apple Touch Icon
+            const linkIcon = document.createElement('link');
+            linkIcon.rel = 'icon';
+            linkIcon.href = appIcon;
+            document.head.appendChild(linkIcon);
+
+            const linkApple = document.createElement('link');
+            linkApple.rel = 'apple-touch-icon';
+            linkApple.href = appIcon;
+            document.head.appendChild(linkApple);
+
+            // Tạo Manifest ảo
+            const manifest = {
+                "name": "Sổ Theo Dõi Sức Khỏe",
+                "short_name": "Sổ Sức Khỏe",
+                "start_url": ".",
+                "display": "standalone",
+                "orientation": "portrait",
+                "background_color": "#f8fafc",
+                "theme_color": "#0d9488",
+                "icons": [
+                    {
+                        "src": appIcon,
+                        "sizes": "512x512",
+                        "type": "image/svg+xml",
+                        "purpose": "any maskable"
+                    }
+                ]
+            };
+            
+            const stringManifest = JSON.stringify(manifest);
+            const blob = new Blob([stringManifest], {type: 'application/json'});
+            const manifestURL = URL.createObjectURL(blob);
+            
+            const linkManifest = document.createElement('link');
+            linkManifest.rel = 'manifest';
+            linkManifest.href = manifestURL;
+            document.head.appendChild(linkManifest);
+        })();
+    </script>
+
+    <!-- 2. CDN Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Add PropTypes (Required for Recharts) -->
     <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <!-- Upgraded to Babel 7 for modern JS support -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.12.7/Recharts.min.js"></script>
 
     <style>
         /* UI/UX Mobile Optimizations */
         body {
-            -webkit-user-select: none; /* Safari */
-            -ms-user-select: none; /* IE 10 and IE 11 */
-            user-select: none; /* Standard syntax */
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
             -webkit-tap-highlight-color: transparent;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background-color: #f8fafc;
-            overscroll-behavior-y: none; /* Prevent pull-to-refresh on mobile */
+            overscroll-behavior-y: none;
         }
-        
-        /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 4px; height: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        
-        /* Input Reset */
-        input, select {
-            -webkit-user-select: text;
-            user-select: text;
-        }
-
-        /* Safe Area for iPhone X+ */
-        .pb-safe {
-            padding-bottom: env(safe-area-inset-bottom);
-        }
+        input, select { -webkit-user-select: text; user-select: text; }
+        .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        // --- 2. CONFIGURATION & ICONS ---
+        // --- 3. APP LOGIC ---
         const { useState, useMemo, useEffect } = React;
         const { ComposedChart, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip: RechartsTooltip, Legend, ResponsiveContainer, ReferenceDot } = Recharts;
 
-        // Inline Lucide Icons (SVG) to ensure single-file portability
+        // Icons
         const IconWrapper = ({ children, size = 24, className = "", ...props }) => (
             <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} {...props}>{children}</svg>
         );
@@ -75,8 +110,7 @@
         const CheckCircle = (p) => <IconWrapper {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></IconWrapper>;
         const AlertTriangle = (p) => <IconWrapper {...p}><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/></IconWrapper>;
 
-        // --- 3. DATA & UTILS ---
-        
+        // Data & Utils
         const boysWeight = [ { month: 0, sd3neg: 2.1, sd2neg: 2.5, sd0: 3.3, sd2: 4.4, sd3: 5.0 }, { month: 3, sd3neg: 4.4, sd2neg: 5.0, sd0: 6.4, sd2: 8.0, sd3: 9.0 }, { month: 6, sd3neg: 5.7, sd2neg: 6.4, sd0: 7.9, sd2: 9.8, sd3: 10.9 }, { month: 9, sd3neg: 6.5, sd2neg: 7.1, sd0: 8.9, sd2: 10.9, sd3: 12.1 }, { month: 12, sd3neg: 7.0, sd2neg: 7.7, sd0: 9.6, sd2: 11.8, sd3: 13.1 }, { month: 18, sd3neg: 7.8, sd2neg: 8.8, sd0: 10.9, sd2: 13.5, sd3: 14.8 }, { month: 24, sd3neg: 8.6, sd2neg: 9.7, sd0: 12.2, sd2: 15.3, sd3: 17.0 }, { month: 36, sd3neg: 10.0, sd2neg: 11.3, sd0: 14.3, sd2: 18.3, sd3: 20.7 }, { month: 48, sd3neg: 11.2, sd2neg: 12.7, sd0: 16.3, sd2: 21.2, sd3: 24.5 }, { month: 60, sd3neg: 12.4, sd2neg: 14.1, sd0: 18.3, sd2: 24.2, sd3: 28.5 }, ];
         const girlsWeight = [ { month: 0, sd3neg: 2.0, sd2neg: 2.4, sd0: 3.2, sd2: 4.2, sd3: 4.8 }, { month: 3, sd3neg: 4.0, sd2neg: 4.5, sd0: 5.8, sd2: 7.3, sd3: 8.2 }, { month: 6, sd3neg: 5.1, sd2neg: 5.7, sd0: 7.3, sd2: 9.1, sd3: 10.2 }, { month: 9, sd3neg: 5.8, sd2neg: 6.5, sd0: 8.2, sd2: 10.2, sd3: 11.5 }, { month: 12, sd3neg: 6.3, sd2neg: 7.0, sd0: 8.9, sd2: 11.2, sd3: 12.6 }, { month: 18, sd3neg: 7.2, sd2neg: 8.1, sd0: 10.2, sd2: 12.8, sd3: 14.5 }, { month: 24, sd3neg: 8.1, sd2neg: 9.0, sd0: 11.5, sd2: 14.6, sd3: 16.6 }, { month: 36, sd3neg: 9.6, sd2neg: 10.8, sd0: 13.9, sd2: 18.1, sd3: 20.9 }, { month: 48, sd3neg: 10.9, sd2neg: 12.3, sd0: 16.1, sd2: 21.5, sd3: 25.4 }, { month: 60, sd3neg: 12.1, sd2neg: 13.7, sd0: 18.2, sd2: 24.9, sd3: 30.0 }, ];
         const boysHeight = [ { month: 0, sd3neg: 44.2, sd2neg: 46.1, sd0: 49.9, sd2: 53.7, sd3: 55.6 }, { month: 3, sd3neg: 55.6, sd2neg: 57.6, sd0: 61.4, sd2: 65.2, sd3: 67.2 }, { month: 6, sd3neg: 61.2, sd2neg: 63.3, sd0: 67.6, sd2: 71.9, sd3: 74.0 }, { month: 9, sd3neg: 65.0, sd2neg: 67.2, sd0: 72.0, sd2: 76.8, sd3: 79.3 }, { month: 12, sd3neg: 68.6, sd2neg: 71.0, sd0: 75.7, sd2: 80.5, sd3: 82.9 }, { month: 18, sd3neg: 74.8, sd2neg: 76.9, sd0: 82.3, sd2: 87.7, sd3: 90.4 }, { month: 24, sd3neg: 80.0, sd2neg: 81.7, sd0: 87.8, sd2: 93.9, sd3: 97.0 }, { month: 36, sd3neg: 87.4, sd2neg: 89.4, sd0: 96.1, sd2: 102.8, sd3: 106.1 }, { month: 48, sd3neg: 93.0, sd2neg: 95.4, sd0: 103.3, sd2: 111.2, sd3: 115.2 }, { month: 60, sd3neg: 98.4, sd2neg: 101.0, sd0: 110.0, sd2: 119.0, sd3: 123.5 }, ];
@@ -154,7 +188,7 @@
         };
 
         const getGeminiAdvice = async (age, gender, weight, height, wAnalysis, hAnalysis) => {
-            const apiKey = ""; // Người dùng cần nhập API Key nếu muốn dùng tính năng này
+            const apiKey = ""; 
             if (!apiKey) return "Vui lòng cấu hình API Key trong mã nguồn để dùng tính năng AI.";
             
             const prompt = `
@@ -184,7 +218,6 @@
                 if (!response.ok) throw new Error('API Error');
                 const data = await response.json();
                 
-                // Fixed: Remove Optional Chaining (?.) and use standard if check
                 if (data && data.candidates && data.candidates.length > 0 && 
                     data.candidates[0].content && 
                     data.candidates[0].content.parts && 
@@ -198,8 +231,7 @@
             }
         };
 
-        // --- 4. COMPONENTS ---
-
+        // Components
         const ZScoreGauge = ({ zScore, label }) => {
             const clampedZ = Math.max(-4, Math.min(4, zScore));
             const percent = ((clampedZ + 4) / 8) * 100;
@@ -542,39 +574,6 @@
             const [aiAdvice, setAiAdvice] = useState('');
             const [mobileChartType, setMobileChartType] = useState('weight');
 
-            // --- NATIVE APP INJECTION ---
-            useEffect(() => {
-                // Inject Manifest
-                const manifest = {
-                    "name": "Theo Dõi Sức Khỏe",
-                    "short_name": "Sổ Sức Khỏe",
-                    "start_url": ".",
-                    "display": "standalone",
-                    "background_color": "#ffffff",
-                    "theme_color": "#0d9488",
-                    "icons": [
-                        { "src": "https://cdn-icons-png.flaticon.com/512/3209/3209072.png", "sizes": "192x192", "type": "image/png" },
-                        { "src": "https://cdn-icons-png.flaticon.com/512/3209/3209072.png", "sizes": "512x512", "type": "image/png" }
-                    ]
-                };
-                const manifestBlob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-                const manifestURL = URL.createObjectURL(manifestBlob);
-                let link = document.querySelector('link[rel="manifest"]');
-                if (!link) {
-                    link = document.createElement('link');
-                    link.rel = 'manifest';
-                    document.head.appendChild(link);
-                }
-                link.href = manifestURL;
-
-                // Fake Service Worker for Install Prompt
-                if ('serviceWorker' in navigator) {
-                   // A dummy service worker is usually required for PWA installability criteria
-                   // We cannot inject a real SW file from a single HTML file easily without server, 
-                   // but this manifest injection is often enough for "Add to Home Screen" manual action.
-                }
-            }, []);
-
             const handleAddRecord = () => {
                 if (!formData.weight || !formData.height) return;
                 const age = calculateAgeMonths(dob, formData.date);
@@ -615,20 +614,19 @@
                 const htmlContent = document.documentElement.outerHTML;
                 const blob = new Blob([htmlContent], { type: 'text/html' });
                 // Đánh lừa tên file là .apk để tạo cảm giác chia sẻ ứng dụng
-                const file = new File([blob], "WHO_Growth_Tracker.apk", { type: 'application/vnd.android.package-archive' });
+                const file = new File([blob], "So_Suc_Khoe.apk", { type: 'application/vnd.android.package-archive' });
                 
                 if (navigator.share) {
                     try {
                         await navigator.share({
-                            title: 'WHO Growth Tracker',
+                            title: 'Sổ Sức Khỏe',
                             text: 'Cài đặt ứng dụng theo dõi sức khỏe cho bé',
                             files: [file]
                         });
                     } catch (err) {
-                        // Fallback nếu không hỗ trợ share file (ví dụ trên PC)
                         try {
                              await navigator.share({
-                                title: 'WHO Growth Tracker',
+                                title: 'Sổ Sức Khỏe',
                                 text: 'Theo dõi sức khỏe bé',
                                 url: window.location.href
                             });
